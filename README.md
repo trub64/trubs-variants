@@ -245,7 +245,16 @@ animalStag
 ## 3. Execution
 On your system go to the mod repository folder and invoke this program with `python ./randomizer.py` (along with any desired options).  The generated mod folder will be placed in the current repository folder and is usable by simply moving it to your 7D2D mods folder.  It is not expected that game restarts are needed, and the generated mod should be server-side only.
 
+The program relies (at present) on the use of a configuration file in JSON format (as per Dough's original design).  While the existing file can be used without alteration, on configuration will likely be have to be changed:
 
+```text
+  "game_install_dir":"/Users/<username>/Library/Application Support/Steam/steamapps/common/7 Days To Die/7DaysToDie.app",
+```
+
+This configuration is currently defined for a Mac user (sorry, it's what I have).  I would like to have the system be a bit smarter and go to the right place based on your system, but that awaits me getting some install path information.  For now, if running on windows, you will need to change this path to point to the proper location that contains your "/Data/Config" folders.
+
+> _**NOTE:** This is still a work in progress, in terms of making it generally available -- I would like to have this seamless, but that will require some outside data for me._
+> 
 ### 3.1. General Options
 
 #### 3.1.1. --config {path}
