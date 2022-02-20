@@ -127,3 +127,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/src/Trub64-Variants*/
+/.idea/

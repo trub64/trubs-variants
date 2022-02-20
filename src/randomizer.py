@@ -1,5 +1,6 @@
 #  coding: utf-8
-#  a 7D2D Module generator
+#  Trub's Variants -- a 7D2D Module generator originally conceived by
+#     Doughphunghus (https://github.com/doughphunghus)
 ################################################################################
 
 import argparse
@@ -7,6 +8,7 @@ import copy
 import json
 import logging
 import os
+import pwd
 import random
 import sys
 # noinspection PyPep8Naming,StandardLibraryXml
@@ -14,7 +16,7 @@ import xml.etree.ElementTree as ET
 from typing import Dict, Optional, Tuple
 
 # noinspection PyUnusedName
-__author__ = "bchoinski@verizon.net"  # as derived from Doughphunghus's perl code
+__author__ = "bchoinski@verizon.net"  # as derived from Doughphunghus's original perl code
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ NEW_ENTITY_FILTER_OUT_LIST = {  # don't ever clone these nodes. Hardcode obvious
     'animalTemplateTimid': "Do not clone this as its a template entity",
     'animalTemplateHostile': "Do not clone this as its a template entity"
 }
-POPULATE_ENTITY_TYPE_LOOKUP_MAX_LOOPS = 2  # Increase number if entitiy classed nest deeply
+POPULATE_ENTITY_TYPE_LOOKUP_MAX_LOOPS = 2  # Increase number if entity classes nest deeply
 
 
 ################################################################################
@@ -71,13 +73,16 @@ class RandEnt(object):
         """
         self.repository = os.path.dirname(os.path.abspath(__file__))
 
-        config_path = os.path.join(self.repository, args.config)
-        if not os.path.exists(config_path):
-            raise RuntimeError(f"No such config file: {config_path}")
+        self.config_path = os.path.abspath(os.path.join(self.repository, args.config))
+        if not os.path.exists(self.config_path):
+            raise RuntimeError(f"No such config file: {self.config_path}")
+        logger.debug(f"Using base configuration file '{self.config_path}")
 
-        with open(config_path, 'r') as fp:
+        # load in JSON configs
+        with open(self.config_path, 'r') as fp:
             self.CONFIGS = json.load(fp)
 
+        # process command line options
         self.cmd = ""
         if args.zcount > 0:
             self.zcount = args.zcount
@@ -110,7 +115,7 @@ class RandEnt(object):
         if self.altered_ai:
             self.cmd += "-a "
         if args.altered_ai_percent > 0:
-            self.altered_ai_percent = float(args.altered_ai_percent)/100.0
+            self.altered_ai_percent = float(args.altered_ai_percent) / 100.0
             self.cmd += f"--ap {args.altered_ai_percent}"
         else:
             self.altered_ai_percent = 0.33
@@ -119,7 +124,7 @@ class RandEnt(object):
         if self.raging_stag:
             self.cmd += "-r "
         if args.raging_stag_percent > 0:
-            self.raging_stag_percent = float(args.raging_stag_percent)/100.0
+            self.raging_stag_percent = float(args.raging_stag_percent) / 100.0
             self.cmd += f"--rp {args.raging_stag_percent}"
         else:
             self.raging_stag_percent = 0.25
@@ -148,6 +153,8 @@ class RandEnt(object):
         self.no_scale = args.noscale
         if self.no_scale:
             self.cmd += "--ns "
+
+        self.game_version = args.version
 
         self.rand = random.Random()
 
@@ -210,25 +217,31 @@ class RandEnt(object):
         Perform preliminary setup and checking.        
         """
         # check game installation (origin may widely vary between windows and mac)
-        self.check_dir(self.CONFIGS['game_install_dir'], 'game_install_dir')
-        self.CONFIGS['game_config_dir'] = self.CONFIGS['game_install_dir'] + "/Data/Config"
-        self.check_dir(self.CONFIGS['game_config_dir'], 'game_config_dir')
-        self.CONFIGS['using_config_dir'] = self.CONFIGS['game_config_dir']
+        install_dir: str = self.CONFIGS.get('game_install_dir', None)
+        if install_dir is None:
+            raise RuntimeError(f"No definition for 'game_install_dir' in the supplied config file!")
+        install_dir = install_dir.replace("<username>", pwd.getpwuid(os.getuid())[0])
 
-        # OVERRIDE! Determine if we should use a saved game (with entities from other mods) for entity generation
-        if self.CONFIGS['use_save_game'] != "":  # can be blank, but if something in it, use it!
-            self.check_config('game_saves_dir')  # can be blank
-            logger.info(f"use_save_game set. Using save game for configs: {self.CONFIGS['use_save_game']}")
-            self.check_dir(self.CONFIGS['game_saves_dir'], 'game_saves_dir')
-            self.CONFIGS['saved_game_dir'] = self.CONFIGS['game_saves_dir'] + "/" + self.CONFIGS[
-                'use_save_game'] + "/ConfigsDump"
-            self.check_dir(self.CONFIGS['saved_game_dir'], 'saved_game_dir')
-            self.CONFIGS['using_config_dir'] = self.CONFIGS['saved_game_dir']
+        self.check_dir(install_dir, 'game_install_dir')
+        self.CONFIGS['game_config_dir'] = install_dir + "/Data/Config"
+        self.check_dir(self.CONFIGS['game_config_dir'], 'game_config_dir')
+        # self.CONFIGS['using_config_dir'] = self.CONFIGS['game_config_dir']
+
+        # REMOVED: not using saved games
+        # # OVERRIDE! Determine if we should use a saved game (with entities from other mods) for entity generation
+        # if self.CONFIGS['use_save_game'] != "":  # can be blank, but if something in it, use it!
+        #     self.check_config('game_saves_dir')  # can be blank
+        #     logger.info(f"use_save_game set. Using save game for configs: {self.CONFIGS['use_save_game']}")
+        #     self.check_dir(self.CONFIGS['game_saves_dir'], 'game_saves_dir')
+        #     self.CONFIGS['saved_game_dir'] = self.CONFIGS['game_saves_dir'] + "/" + self.CONFIGS[
+        #         'use_save_game'] + "/ConfigsDump"
+        #     self.check_dir(self.CONFIGS['saved_game_dir'], 'saved_game_dir')
+        #     self.CONFIGS['using_config_dir'] = self.CONFIGS['saved_game_dir']
 
         # Note: Here is where we pull the XML configs from!
-        self.CONFIGS['entityclasses_file'] = self.CONFIGS['using_config_dir'] + '/entityclasses.xml'
+        self.CONFIGS['entityclasses_file'] = self.CONFIGS['game_config_dir'] + '/entityclasses.xml'
         self.check_file(self.CONFIGS['entityclasses_file'], 'entityclasses_file')
-        self.CONFIGS['entitygroups_file'] = self.CONFIGS['using_config_dir'] + '/entitygroups.xml'
+        self.CONFIGS['entitygroups_file'] = self.CONFIGS['game_config_dir'] + '/entitygroups.xml'
         self.check_file(self.CONFIGS['entitygroups_file'], 'entitygroups_file')
 
         # Note: Localization file does not exist in a Saved Game! Use config dir ALWAYS!
@@ -242,8 +255,9 @@ class RandEnt(object):
         tag3 = "_HS" if self.headshot else ""
         tag4 = "_AI" if self.altered_ai else ""
         tag5 = "_RS" if self.raging_stag else ""
-        self.CONFIGS['modlet_name'] = (f"{self.CONFIGS['modlet_name_prefix']}{tag}{tag2a}{tag2b}{tag3}{tag4}{tag5}-"
-                                       f"{self.CONFIGS['game_version']}{self.CONFIGS['modlet_name_tag']}")
+        gv = "" if self.game_version is None else f"-{self.game_version}"
+        self.CONFIGS['modlet_name'] = (f"{self.CONFIGS['modlet_name_prefix']}{tag}{tag2a}{tag2b}{tag3}{tag4}{tag5}"
+                                       f"{gv}")
         self.CONFIGS['modlet_gen_dir'] = self.repository + '/' + self.CONFIGS['modlet_name']
 
         # NOTE: Change from original, loops now controlled via command line
@@ -274,7 +288,7 @@ class RandEnt(object):
             self.FILTER_ALLOW_ONLY_LIST_FLAG = True  # Ease of knowing when to use these configs
             self.NEW_ENTITY_FILTER_ALLOW_ONLY_LIST[user_config_only_allow_entity] = reason
 
-        # Get game defaults (as of a19.b6)
+        # Get game defaults
         self.ENTITYCLASSES_DOM = ET.parse(self.CONFIGS['entityclasses_file']).getroot()
         self.ENTITYGROUPS_DOM = ET.parse(self.CONFIGS['entitygroups_file']).getroot()
 
@@ -1913,9 +1927,9 @@ class RandEnt(object):
   <ModInfo>
     <Name value="{self.CONFIGS['modlet_name']}" />
     <Description value="Generated random entities from existing ones" />
-    <Author value="Doughphunghus" />
-    <Version value="1.1.0" />
-    <Website value="https://github.com/doughphunghus" />
+    <Author value="trub64 (derived from Doughphunghus)" />
+    <Version value="1.0.0" />
+    <Website value="https://github.com/trub64/trubs-variants" />
   </ModInfo>
 </xml>""")
 
@@ -2115,7 +2129,7 @@ def build_cli_parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create a variant set of 7D2D entities")
 
     # for each supported output type, add an optiuon
-    parser.add_argument("--config", action="store", dest="config", default=None,
+    parser.add_argument("--config", action="store", dest="config", default="./config.json",
                         help="Specify the local JSON config file")
     parser.add_argument("--debug", action="store_true", dest="debug", default=False,
                         help="Enable debug logging\n")
@@ -2123,6 +2137,8 @@ def build_cli_parser() -> argparse.Namespace:
                         help="Generate only, no output\n")
     parser.add_argument("--prefix", action="store", dest="prefix", default=None,
                         help="Specify the entity definition prefix")
+    parser.add_argument("--version", action="store", dest="version", default=None,
+                        help="(optional) game version this is derived from")
 
     parser.add_argument("-z", action="store", type=int, dest="zcount", default=-1,
                         help="count for zombie variants (default x10")

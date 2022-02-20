@@ -1,17 +1,13 @@
 {
-  "author":"Doughphunghus",
+  "author":"trub64 (derived from Doughphunghus)",
 
-  "game_install_dir":"/Users/burtonchoinski/Library/Application Support/Steam/steamapps/common/7 Days To Die/7DaysToDie.app",
-  "game_saves_dir":"/Users/burtonchoinski/Library/Application Support/7DaysToDie/Saves",
+  "game_install_dir":"/Users/<username>/Library/Application Support/Steam/steamapps/common/7 Days To Die/7DaysToDie.app",
+  "game_saves_dir":"/Users/<username>/Library/Application Support/7DaysToDie/Saves",
   "use_save_game":"",
   
-  "game_version":"a20",
-  "modlet_name_prefix":"Trub-Variants",
-  "modlet_name_tag":"",
-  
-  "log_level":"2",
-  
-  "unique_entity_prefix":"Trubs",
+  "modlet_name_prefix":"Trub64-Variants",
+
+  "unique_entity_prefix":"Trub64",
   "ignore_entity_list":{},
   "only_allow_these_entities_list":{},
 
