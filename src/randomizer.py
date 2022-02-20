@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from typing import Dict, Optional, Tuple
 
 # noinspection PyUnusedName
-__author__ = "bchoinski@verizon.net"  # as derived from Doughphunghus's original perl code
+__author__ = "trub64"  # as derived from Doughphunghus's original perl code
 
 logger = logging.getLogger(__name__)
 
@@ -100,15 +100,12 @@ class RandEnt(object):
         else:
             self.ecount = 30
 
-        self.prefix = args.prefix
-        if args.prefix is not None:
-            self.cmd += f"--prefix {args.prefix}"
-
         self.meshes = args.meshes
         if self.meshes:
             self.cmd += "-m "
         self.mesh_always = args.mesh_always
         if self.mesh_always:
+            self.meshes = True  # automatically turn it on
             self.cmd += "--ma "
 
         self.altered_ai = args.altered_ai
@@ -171,6 +168,8 @@ class RandEnt(object):
         self.biggest = {}
         self.raging_stag_count = 0
         self.altered_ai_count = 0
+
+        self.prefix = ""
 
     # --- Validation ------------------------------------------------------------
 
@@ -269,10 +268,8 @@ class RandEnt(object):
         self.check_config('ConfigEntityZombie.enable_walktype_crawler_limit')
 
         # modlet internal name override with --prefix
-        if self.prefix is not None:
-            self.CONFIGS['unique_entity_prefix'] = self.prefix.trim()
-        else:
-            self.check_config('unique_entity_prefix')
+        self.check_config('unique_entity_prefix')
+        self.prefix = self.CONFIGS['unique_entity_prefix']
 
         # Allow users to configure zeds to NEVER CLONE as modlets may do weird stuff if randomizing against a
         # saved games files
@@ -381,7 +378,7 @@ class RandEnt(object):
         if name not in self.entity_name_count:
             self.entity_name_count[name] = 0
         self.entity_name_count[name] += 1
-        return f"{self.CONFIGS['unique_entity_prefix']}_{name}_{self.entity_name_count[name]:03d}"
+        return f"{self.prefix}_{name}_{self.entity_name_count[name]:03d}"
 
     def generate_new_entity_from_existing_name(self, name: str) -> Tuple[Optional[str], Optional[ET.Element]]:
         """
@@ -1943,14 +1940,14 @@ class RandEnt(object):
         self.entities_xml_file = modlet_config_dir + '/entityclasses.xml'
         logger.debug(f"Starting Entities file: {self.entities_xml_file}")
         with open(self.entities_xml_file, 'w') as fp:
-            fp.write('<Trubs>' + "\n")
+            fp.write(f"<{self.prefix}>" + "\n")
             fp.write('<append xpath="/entity_classes">' + "\n")
 
         # EntityGroups file
         self.entitygroups_xml_file = modlet_config_dir + '/entitygroups.xml'
         logger.debug(f"Starting EntityGroups file: {self.entitygroups_xml_file}")
         with open(self.entitygroups_xml_file, 'w') as fp:
-            fp.write('<Trubs>' + "\n")
+            fp.write(f"<{self.prefix}>" + "\n")
 
         # headshots mode
         if self.headshot:
@@ -2024,12 +2021,12 @@ class RandEnt(object):
         logger.debug('Completing: Entities file.')
         with open(self.entities_xml_file, 'a') as fp:
             fp.write('</append>' + "\n")
-            fp.write('</Trubs>' + "\n")
+            fp.write(f"</{self.prefix}>" + "\n")
 
         # EntityGroups file
         logger.debug('Completing: EntityGroups file.')
         with open(self.entitygroups_xml_file, 'a') as fp:
-            fp.write('</Trubs>' + "\n")
+            fp.write(f"</{self.prefix}>" + "\n")
 
         modlet_dir = self.CONFIGS['modlet_gen_dir']
 
@@ -2135,8 +2132,6 @@ def build_cli_parser() -> argparse.Namespace:
                         help="Enable debug logging\n")
     parser.add_argument("--dryrun", action="store_true", dest="dryrun", default=False,
                         help="Generate only, no output\n")
-    parser.add_argument("--prefix", action="store", dest="prefix", default=None,
-                        help="Specify the entity definition prefix")
     parser.add_argument("--version", action="store", dest="version", default=None,
                         help="(optional) game version this is derived from")
 
