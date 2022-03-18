@@ -111,20 +111,14 @@ class RandEnt(object):
         self.altered_ai = args.altered_ai
         if self.altered_ai:
             self.cmd += "-a "
-        if args.altered_ai_percent > 0:
-            self.altered_ai_percent = float(args.altered_ai_percent) / 100.0
-            self.cmd += f"--ap {args.altered_ai_percent}"
-        else:
-            self.altered_ai_percent = 0.33
+        self.altered_ai_percent = float(args.altered_ai_percent) / 100.0
+        self.cmd += f"--ap {args.altered_ai_percent}"
 
         self.raging_stag = args.raging_stag
         if self.raging_stag:
             self.cmd += "-r "
-        if args.raging_stag_percent > 0:
-            self.raging_stag_percent = float(args.raging_stag_percent) / 100.0
-            self.cmd += f"--rp {args.raging_stag_percent}"
-        else:
-            self.raging_stag_percent = 0.25
+        self.raging_stag_percent = float(args.raging_stag_percent) / 100.0
+        self.cmd += f"--rp {args.raging_stag_percent}"
 
         self.giants = args.giants
         if self.giants:
@@ -1361,21 +1355,24 @@ class RandEnt(object):
         ("AITarget-5", "")
     ]
 
-    AI_LIST = [
+    AI_LIST1 = [
         ("animalBear", AI_BEAR),
         ("animalWolf", AI_WOLF),
         ("animalCoyote", AI_COYOTE),
-        ("animalDireWolf", AI_DIREWOLF),
         ("animalMountainLion", AI_MOUNTAINLION),
         ("animalSnake", AI_SNAKE),
         ("animalBoar", AI_BOAR),
+        ("animalZombieDog", AI_DOG),
+    ]
+    AI_LIST2 = [
+        ("animalDireWolf", AI_DIREWOLF),
         ("animalBossGrace", AI_GRACE),
-        ("animalBossGrace", AI_DOG),
         ("zombieTemplateMale", AI_ZOMBIE),
         ("zombieSpider", AI_SPIDER),
         ("zombieFatCop", AI_COP),
         ("zombieDemolition", AI_DEMO),
     ]
+    AI_LIST = AI_LIST1 + AI_LIST2
 
     # Zombie animals always act like zombies, most timid are unaffected
     EXCEPT_FOR = {
@@ -1427,6 +1424,15 @@ class RandEnt(object):
 
         return entity
 
+
+    MELEE = [
+        "meleeHandAnimalWolf",
+        "meleeHandAnimalDireWolf",
+        "meleeHandAnimalBear",
+        "meleeHandAnimalZombieBear",
+        "meleeHandBossGrace"
+    ]
+
     def raging_stag_ai(self, entity: ET.Element) -> ET.Element:
         """
         For stags, have a chance of swapping out their normal AI with an enemy animal AI.
@@ -1435,7 +1441,7 @@ class RandEnt(object):
         :return: modified entity
         """
         original = entity.attrib.get('original_name', "???")
-        if self.rand.random() > self.raging_stag_percent or original in self.EXCEPT_FOR:
+        if self.rand.random() > self.raging_stag_percent or original != "animalStag":
             return entity  # no change
 
         # remove any AITask or AITarget entries
@@ -1445,10 +1451,10 @@ class RandEnt(object):
                 entity.remove(node)
 
         # choose a new AI
-        use = self.rand.choice(self.AI_LIST)
+        use = self.rand.choice(self.AI_LIST2)  # animal AI only
 
         # add HandItem so it has something to work with
-        use[1].append(("HandItem", self.rand.choice(["meleeHandAnimalCoyote", "meleeHandAnimalZombieDog"])))
+        use[1].append(("HandItem", self.rand.choice(self.MELEE)))
 
         # add in new AI in proper order
         # ("name", "value") or ("name", "value", "data") for each entry
@@ -1465,8 +1471,8 @@ class RandEnt(object):
         entity.attrib['trub_raging'] = "yes"
         self.set_property(entity, "IsEnemyEntity", "true")
         self.set_property(entity, "AIGroupCircle", "1")
-        self.set_property(entity, "AINoiseSeekDist", "3")
-        self.set_property(entity, "AIPathCostScale", ".4, .6")
+        self.set_property(entity, "AINoiseSeekDist", "6")
+        self.set_property(entity, "AIPathCostScale", ".2, .4")
         self.set_property(entity, "Class", "EntityEnemyAnimal")
         self.raging_stag_count += 1
         return entity
@@ -1538,11 +1544,19 @@ class RandEnt(object):
         "particleeffects/blood",
         "entities/electrical/materials/solarpanel",
         "#Other/Items?Misc/snowballPrefab/materials/snowball",
+        "entities/buildings/materials/chimney",
+        "entities/electrical/materials/electric_fence_post",
+        "particleeffects/materials/blood_mist_tile_02",
+        "entities/commercial/materials/metalpaintedwhite",
+        "entities/furniture/materials/candelabra",
+        "particleeffects/materials/heart",
+        "Materials/UMAFur_ZombieBear",
     ]
     # ephemeral
     ephemeral = [
         "materials/waterinbucket",
         "itemmodeffects/materials/melee_fire",
+        "itemmodeffects/materials/baton_arc",
     ]
     glowing = [
         "#Entities/Zombies?Zombies/Materials/feral_eye.mat",
@@ -1700,6 +1714,10 @@ class RandEnt(object):
         if self.altered_ai and is_enemy and is_animal:
             new_entity = self.alter_hostile_animal_ai(new_entity)
 
+        # check for raging stags
+        if is_animal and not is_enemy and self.raging_stag:
+            new_entity = self.raging_stag_ai(new_entity)
+
         for cfg_property_key in config_keys:
 
             if cfg_property_key in ['disable_randomizer', 'num_generation_loops', 'ignore_entity_list',
@@ -1758,9 +1776,6 @@ class RandEnt(object):
                                                      {'pct_random_int': f"{use_scale}",
                                                       'default': "1.0"})
 
-        # check for raging stags
-        if is_animal and not is_enemy and self.raging_stag:
-            new_entity = self.raging_stag_ai(new_entity)
 
         # additions for odd strange zombies and hostile animals
         if self.meshes:
@@ -2166,12 +2181,12 @@ def build_cli_parser() -> argparse.Namespace:
 
     parser.add_argument("-a", action="store_true", dest="altered_ai", default=False,
                         help="If specified, chance of altered AI for hostile animals (default 33%)")
-    parser.add_argument("--ap", action="store", type=int, dest="altered_ai_percent", default=-1,
+    parser.add_argument("--ap", action="store", type=int, dest="altered_ai_percent", default=33,
                         help="Specify chance of altered hostile animal AI")
 
     parser.add_argument("-r", action="store_true", dest="raging_stag", default=False,
-                        help="If specified, chance of hostile AI for stags (default 25%)")
-    parser.add_argument("--rp", action="store", type=int, dest="raging_stag_percent", default=-1,
+                        help="If specified, chance of hostile AI for stags (default 33%)")
+    parser.add_argument("--rp", action="store", type=int, dest="raging_stag_percent", default=33,
                         help="Specify chance of raging stags")
 
     args = parser.parse_args()
