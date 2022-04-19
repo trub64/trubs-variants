@@ -84,21 +84,18 @@ class RandEnt(object):
 
         # process command line options
         self.cmd = ""
-        if args.zcount > 0:
-            self.zcount = args.zcount
+
+        self.zcount = args.zcount
+        if args.zcount != 10:
             self.cmd += f"-z {self.zcount} "
-        else:
-            self.zcount = 10
-        if args.fcount > 0:
-            self.fcount = args.fcount
+
+        self.fcount = args.fcount
+        if args.fcount != 10:
             self.cmd += f"-f {self.fcount} "
-        else:
-            self.fcount = 10
-        if args.ecount > 0:
-            self.ecount = args.ecount
+
+        self.ecount = args.ecount
+        if args.ecount != 30:
             self.cmd += f"-e {self.ecount}"
-        else:
-            self.ecount = 30
 
         self.meshes = args.meshes
         if self.meshes:
@@ -112,13 +109,15 @@ class RandEnt(object):
         if self.altered_ai:
             self.cmd += "-a "
         self.altered_ai_percent = float(args.altered_ai_percent) / 100.0
-        self.cmd += f"--ap {args.altered_ai_percent}"
+        if args.altered_ai_percent != 33:
+            self.cmd += f"--ap {args.altered_ai_percent}"
 
         self.raging_stag = args.raging_stag
         if self.raging_stag:
             self.cmd += "-r "
         self.raging_stag_percent = float(args.raging_stag_percent) / 100.0
-        self.cmd += f"--rp {args.raging_stag_percent}"
+        if args.raging_stag_percent != 33:
+            self.cmd += f"--rp {args.raging_stag_percent}"
 
         self.giants = args.giants
         if self.giants:
@@ -220,17 +219,6 @@ class RandEnt(object):
         self.check_dir(self.CONFIGS['game_config_dir'], 'game_config_dir')
         # self.CONFIGS['using_config_dir'] = self.CONFIGS['game_config_dir']
 
-        # REMOVED: not using saved games
-        # # OVERRIDE! Determine if we should use a saved game (with entities from other mods) for entity generation
-        # if self.CONFIGS['use_save_game'] != "":  # can be blank, but if something in it, use it!
-        #     self.check_config('game_saves_dir')  # can be blank
-        #     logger.info(f"use_save_game set. Using save game for configs: {self.CONFIGS['use_save_game']}")
-        #     self.check_dir(self.CONFIGS['game_saves_dir'], 'game_saves_dir')
-        #     self.CONFIGS['saved_game_dir'] = self.CONFIGS['game_saves_dir'] + "/" + self.CONFIGS[
-        #         'use_save_game'] + "/ConfigsDump"
-        #     self.check_dir(self.CONFIGS['saved_game_dir'], 'saved_game_dir')
-        #     self.CONFIGS['using_config_dir'] = self.CONFIGS['saved_game_dir']
-
         # Note: Here is where we pull the XML configs from!
         self.CONFIGS['entityclasses_file'] = self.CONFIGS['game_config_dir'] + '/entityclasses.xml'
         self.check_file(self.CONFIGS['entityclasses_file'], 'entityclasses_file')
@@ -283,7 +271,9 @@ class RandEnt(object):
         self.ENTITYCLASSES_DOM = ET.parse(self.CONFIGS['entityclasses_file']).getroot()
         self.ENTITYGROUPS_DOM = ET.parse(self.CONFIGS['entitygroups_file']).getroot()
 
-    def populate_entity_type_lookup(self) -> bool:
+        self.details = {}
+
+    def create_entity_type_lookup(self) -> bool:
         """
         Loop through Entities, and create the ENTITY_TYPE_LOOKUP table
         
@@ -325,7 +315,7 @@ class RandEnt(object):
 
         return lookup_type_failures
 
-    def populate_type_entity_lookup(self) -> None:
+    def create_type_entity_lookup(self) -> None:
         """
         build the reverse lookup TYPE_ENTITY_LOOKUP.
         """
@@ -340,13 +330,13 @@ class RandEnt(object):
 
             self.TYPE_ENTITY_LOOKUP[value].append(entity_type_lookup_key)
 
-    def generate_lookup_tables(self) -> None:
+    def create_lookup_tables(self) -> None:
         """
         Loop all entity types until we have populated ENTITY_TYPE_LOOKUP with all types
         """
         counter = 1
         while counter > 0:
-            if not self.populate_entity_type_lookup():
+            if not self.create_entity_type_lookup():
                 break
 
             if counter > POPULATE_ENTITY_TYPE_LOOKUP_MAX_LOOPS:
@@ -355,7 +345,7 @@ class RandEnt(object):
 
             counter += 1
 
-        self.populate_type_entity_lookup()
+        self.create_type_entity_lookup()
 
         for key, value in self.TYPE_ENTITY_LOOKUP.items():
             logger.debug(f"{key} => {value}")
@@ -828,15 +818,15 @@ class RandEnt(object):
                 sizes.append("300")
         elif self.munchkins:  # animals varied normal sized, zombies smaller
             if is_animal:
-                sizes = ["50", "80", "90", "100", "110", "120"]
+                sizes = ["50", "60", "70", "80", "90", "100", "110", "120"]
             else:
-                sizes = ["45", "50", "55", "60", "65", "70"]
-        else:
-            sizes = ["85", "90", "95", "100", "105", "110", "115"]
+                sizes = ["40", "50", "60", "70"]
+        else: # normal variants
+            sizes = ["80", "90", "100", "110", "120"]
             if is_animal:
-                sizes += ["50", "75", "125", "150"]
+                sizes += ["50", "60", "70", "130", "140", "150"]
                 if not is_enemy:  # allow for larger timids
-                    sizes = sizes + ["200", "250"]
+                    sizes = sizes + ["175", "200", "225", "250"]
 
         rand_change_pct = random.choice(sizes)
         entity.attrib['trub_scale'] = rand_change_pct
@@ -1142,6 +1132,7 @@ class RandEnt(object):
 
     # ----- AI alteration code
     # FUTURE: randomize numeric entries?
+    # NOTE: AI Entries must end with entry having value of ""
     AI_BEAR = [
         ("AITask-1", "BreakBlock"),
         ("AITask-2", "DestroyArea"),
@@ -1154,6 +1145,21 @@ class RandEnt(object):
         ("AITarget-1", "SetAsTargetIfHurt"),
         ("AITarget-2", "BlockingTargetTask"),
         ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,13,8,EntityAnimalStag,0,0,EntityZombie,0,0"),
+        ("AITarget-4", "")
+    ]
+
+    AI_ZOMBIE_BEAR = [
+        ("AITask-1", "BreakBlock"),
+        ("AITask-2", "DestroyArea"),
+        ("AITask-3", "Territorial"),
+        ("AITask-4", "ApproachAndAttackTarget", "class=EntityAnimalStag,40,EntityPlayer,0,EntityNPC,0"),
+        ("AITask-5", "ApproachSpot"),
+        ("AITask-6", "Look"),
+        ("AITask-7", "Wander"),
+        ("AITask-8", ""),  # end task
+        ("AITarget-1", "SetAsTargetIfHurt"),
+        ("AITarget-2", "BlockingTargetTask"),
+        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,13,8,EntityAnimalStag,0,0"),
         ("AITarget-4", "")
     ]
 
@@ -1280,17 +1286,19 @@ class RandEnt(object):
     ]
 
     AI_ZOMBIE = [
+        ("AIFeralSense", "1.5"),
         ("AINoiseSeekDist", "8"),
         ("AIPathCostScale", ".15, .4"),
         ("AITask-1", "BreakBlock"),
         ("AITask-2", "DestroyArea"),
         ("AITask-3", "Territorial"),
+        ("AITask-4", "ApproachDistraction"),
         # class,maxChaseTime (return home)
-        ("AITask-4", "ApproachAndAttackTarget", "class=EntityNPC,0,EntityEnemyAnimal,0,EntityPlayer,0"),
-        ("AITask-5", "ApproachSpot"),
-        ("AITask-6", "Look"),
-        ("AITask-7", "Wander"),
-        ("AITask-8", ""),
+        ("AITask-5", "ApproachAndAttackTarget", "class=EntityNPC,0,EntityEnemyAnimal,0,EntityPlayer,0"),
+        ("AITask-6", "ApproachSpot"),
+        ("AITask-7", "Look"),
+        ("AITask-8", "Wander"),
+        ("AITask-9", ""),
         ("AITarget-1", "SetAsTargetIfHurt", "class=EntityNPC,EntityEnemyAnimal,EntityPlayer"),
         ("AITarget-2", "BlockingTargetTask"),
         ("AITarget-3", "SetNearestCorpseAsTarget", "class=EntityPlayer"),
@@ -1324,6 +1332,8 @@ class RandEnt(object):
         ("AINoiseSeekDist", "8"),
         ("AIPathCostScale", ".15, .4"),
         ("AITask-1", "BreakBlock"),
+        # NOTE: Need to test if we can add spitting to others
+        # ("AITask-2", "RangedAttackTarget", "itemType=1;cooldown=4;duration=5"),
         ("AITask-2", "ApproachAndAttackTarget", "class=EntityNPC,0,EntityPlayer"),
         ("AITask-3", "ApproachSpot"),
         ("AITask-4", "Look"),
@@ -1337,42 +1347,27 @@ class RandEnt(object):
         ("AITarget-5", "")
     ]
 
-    AI_DEMO = [
-        ("AINoiseSeekDist", "8"),
-        ("AIPathCostScale", ".15, .4"),
-        ("AITask-1", "BreakBlock"),
-        ("AITask-2", "DestroyArea"),
-        ("AITask-3", "ApproachAndAttackTarget", "class=EntityNPC,0,EntityEnemyAnimal,0,EntityPlayer,0"),
-        ("AITask-4", "ApproachSpot"),
-        ("AITask-5", "Look"),
-        ("AITask-6", "Wander"),
-        ("AITask-7", ""),
-        ("AITarget-1", "SetAsTargetIfHurt", "class=EntityNPC,EntityEnemyAnimal,EntityPlayer"),
-        ("AITarget-2", "BlockingTargetTask"),
-        ("AITarget-3", "SetNearestCorpseAsTarget", "class=EntityPlayer"),
-        # class, hear distance, see dist (checked left to right, 0 dist uses entity default)
-        ("AITarget-4", "SetNearestEntityAsTarget", "class=EntityPlayer,0,0,EntityNPC,0,0"),
-        ("AITarget-5", "")
-    ]
-
     AI_LIST1 = [
-        ("animalBear", AI_BEAR),
         ("animalWolf", AI_WOLF),
         ("animalCoyote", AI_COYOTE),
-        ("animalMountainLion", AI_MOUNTAINLION),
         ("animalSnake", AI_SNAKE),
         ("animalBoar", AI_BOAR),
         ("animalZombieDog", AI_DOG),
     ]
     AI_LIST2 = [
+        ("animalBear", AI_BEAR),
+        ("animalZombieBear", AI_ZOMBIE_BEAR),
         ("animalDireWolf", AI_DIREWOLF),
         ("animalBossGrace", AI_GRACE),
+        ("animalMountainLion", AI_MOUNTAINLION),
+    ]
+    AI_LIST3 = [
         ("zombieTemplateMale", AI_ZOMBIE),
         ("zombieSpider", AI_SPIDER),
         ("zombieFatCop", AI_COP),
-        ("zombieDemolition", AI_DEMO),
     ]
-    AI_LIST = AI_LIST1 + AI_LIST2
+
+    AI_LIST = AI_LIST1 + AI_LIST2 + AI_LIST3
 
     # Zombie animals always act like zombies, most timid are unaffected
     EXCEPT_FOR = {
@@ -1384,6 +1379,11 @@ class RandEnt(object):
         "animalChicken": True,
         "animalDoe": True,
     }
+
+    def _add_details_count(self, key:str) -> None:
+        if key not in self.details:
+            self.details[key] = 0
+        self.details[key] += 1
 
     def alter_hostile_animal_ai(self, entity: ET.Element) -> ET.Element:
         """
@@ -1409,6 +1409,9 @@ class RandEnt(object):
             if pick[0] != original:
                 use = pick
 
+        key = f"{original} ({pick[0]} AI)"
+        self._add_details_count(key)
+
         # add in new AI in proper order
         # ("name", "value") or ("name", "value", "data") for each entry
         for item in use[1]:
@@ -1425,8 +1428,12 @@ class RandEnt(object):
         return entity
 
 
-    MELEE = [
+    MELEE1 = [
         "meleeHandAnimalWolf",
+        "meleeHandAnimalBear",
+        "meleeHandAnimalZombieDog",
+    ]
+    MELEE2 = [
         "meleeHandAnimalDireWolf",
         "meleeHandAnimalBear",
         "meleeHandAnimalZombieBear",
@@ -1441,7 +1448,7 @@ class RandEnt(object):
         :return: modified entity
         """
         original = entity.attrib.get('original_name', "???")
-        if self.rand.random() > self.raging_stag_percent or original != "animalStag":
+        if self.rand.random() > self.raging_stag_percent or original in self.EXCEPT_FOR:
             return entity  # no change
 
         # remove any AITask or AITarget entries
@@ -1451,10 +1458,16 @@ class RandEnt(object):
                 entity.remove(node)
 
         # choose a new AI
-        use = self.rand.choice(self.AI_LIST2)  # animal AI only
+        use = self.rand.choice(self.AI_LIST1 + self.AI_LIST2)  # animal AI only
+        key = f"{original} ({use[0]} AI)"
+        self._add_details_count(key)
 
         # add HandItem so it has something to work with
-        use[1].append(("HandItem", self.rand.choice(self.MELEE)))
+        bite =  self.rand.choice(self.MELEE1 + self.MELEE2)
+        use[1].append(("HandItem", bite))
+
+        key = f"Raging {original} Bite {bite}"
+        self._add_details_count(key)
 
         # add in new AI in proper order
         # ("name", "value") or ("name", "value", "data") for each entry
@@ -1481,45 +1494,11 @@ class RandEnt(object):
     # ----- Entity Texture changing ----- #
     #######################################
 
-    # NOTE: Don't use the following (makes things invisible):
-    #   "particleeffects/materials/waterfallslope"
+    # NOTE: Don't use the following for body (makes things invisible):
     #   "particleeffects/models/materials/p_fiber"
     #   "materials/occludeeshadowcaster"
     #   "materials/SoftGlow"
 
-    # A19 materials, something causes problems when used, commented out and left for reference
-    # # transparent, picks up eye glow
-    # choices0a = [
-    #     "entities/buildings/materials/glass_industrial_lod",
-    #     "particleeffects/models/materials/p_glass",
-    # ]
-    # # solid
-    # choices0b = [
-    #     "entities/buildings/materials/chimney",
-    #     "entities/resources/materials/orecoalboulder",
-    #     "entities/resources/materials/oreshaleboulder",
-    #     "entities/resources/materials/oreleadboulder",
-    #     "particleeffects/models/car_explode",
-    #     "particleeffects/models/materials/p_dirt",
-    #     "particleeffects/models/materials/p_gib",
-    #     "particleeffects/models/materials/p_wood",  # mummy
-    #     "shapes/materials/wrought_iron_metal",
-    #     "entities/animals/vulture/materials/vulture_v2",
-    #     "entities/animals/boar/materials/grace",
-    #     "entities/doors/materials/steel_door_2",
-    #     "particleeffects/blood",
-    #     "particleeffects/models/car_explode",
-    #     "particleeffects/materials/blood_mist_tile_02",
-    #     "itemmodeffects/materials/baton_arc",
-    #     "Entities/Animals/Wolf/Materials/zombie_wolf"
-    # ]
-    # # ephemeral
-    # choices0c = [
-    #     "itemmodeffects/materials/baton_arc_fp",
-    #     "itemmodeffects/materials/melee_fire",
-    #     "materials/imageeffect_turretview",
-    #     "materials/waterinbucket",
-    # ]
 
     # transparent, picks up eye glow
     transparent = [
@@ -1549,14 +1528,17 @@ class RandEnt(object):
         "particleeffects/materials/blood_mist_tile_02",
         "entities/commercial/materials/metalpaintedwhite",
         "entities/furniture/materials/candelabra",
-        "particleeffects/materials/heart",
-        "Materials/UMAFur_ZombieBear",
     ]
     # ephemeral
     ephemeral = [
         "materials/waterinbucket",
         "itemmodeffects/materials/melee_fire",
-        "itemmodeffects/materials/baton_arc",
+        "itemmodeffects/materials/baton_arc",  # don't use for body
+        "particleeffects/materials/waterfallslope",   # don't use for body
+    ]
+    ephemeral_body = [
+        "materials/waterinbucket",
+        "itemmodeffects/materials/melee_fire",
     ]
     glowing = [
         "#Entities/Zombies?Zombies/Materials/feral_eye.mat",
@@ -1569,10 +1551,10 @@ class RandEnt(object):
         "particleeffects/models/materials/electrical_arc",
     ]
 
-    choices0 = transparent + solid + ephemeral
+    choices0 = transparent + solid + ephemeral_body
 
     # usually eye effects, hair for others
-    choices1 = solid + glowing
+    choices1 = solid + glowing + ephemeral
 
     # usually hair effects
     choices2 = solid + ephemeral
@@ -1580,7 +1562,7 @@ class RandEnt(object):
     # structure to cut down on duplicate variants
     seen_variations = {}
 
-    def replace_materials(self, entity: ET.Element, is_enemy: bool) -> ET.Element:
+    def modify_materials(self, entity: ET.Element, is_enemy: bool) -> ET.Element:
         """
         Based on information from Robeloto's mod, for some entities replace the meshes to make them freaky.
 
@@ -1714,10 +1696,6 @@ class RandEnt(object):
         if self.altered_ai and is_enemy and is_animal:
             new_entity = self.alter_hostile_animal_ai(new_entity)
 
-        # check for raging stags
-        if is_animal and not is_enemy and self.raging_stag:
-            new_entity = self.raging_stag_ai(new_entity)
-
         for cfg_property_key in config_keys:
 
             if cfg_property_key in ['disable_randomizer', 'num_generation_loops', 'ignore_entity_list',
@@ -1776,17 +1754,20 @@ class RandEnt(object):
                                                      {'pct_random_int': f"{use_scale}",
                                                       'default': "1.0"})
 
+        # check for raging stags
+        if is_animal and not is_enemy and self.raging_stag:
+            new_entity = self.raging_stag_ai(new_entity)
 
         # additions for odd strange zombies and hostile animals
         if self.meshes:
-            new_entity = self.replace_materials(new_entity, is_enemy)
+            new_entity = self.modify_materials(new_entity, is_enemy)
 
         # handle size affecting harvesting
         new_entity = self.modify_harvestables(new_entity)
 
         return new_entity
 
-    def zed_generate(self) -> None:
+    def generate_zombie(self) -> None:
         """
         Zombie Generate.
         """
@@ -1832,7 +1813,7 @@ class RandEnt(object):
                 self.NEW_ENTITIES[new_entity_name]['zed_is_from'] = entity_name
                 self.NEW_ENTITIES[new_entity_name]['zed_node'] = new_entity
 
-    def enemy_animal_generate(self) -> None:
+    def generate_enemy_animal(self) -> None:
         """
         Enemy Animal Generation.
         """
@@ -1874,7 +1855,7 @@ class RandEnt(object):
                 self.NEW_ENTITIES[new_entity_name]['zed_is_from'] = entity_name
                 self.NEW_ENTITIES[new_entity_name]['zed_node'] = new_entity
 
-    def friendly_animal_generate(self) -> None:
+    def generate_friendly_animal(self) -> None:
         """
         Timid Animal Generation.
         """
@@ -2094,6 +2075,13 @@ class RandEnt(object):
             fp.write("BIGGEST:\n")
             for n, v in sorted(self.biggest.items()):
                 fp.write(f"   {n:30s} - {v:5d} hp\n")
+            fp.write("\n--------------------------------------------------\n")
+            fp.write("OTHER DETAILS:\n")
+            maxkey = 0
+            for k,v in sorted(self.details.items()):
+                maxkey = max(maxkey, len(k))
+            for k,v in sorted(self.details.items()):
+                fp.write(f"   {k:{maxkey}s} - {v}\n")
 
     def modlet_generate(self) -> None:
         """
@@ -2150,11 +2138,11 @@ def build_cli_parser() -> argparse.Namespace:
     parser.add_argument("--version", action="store", dest="version", default=None,
                         help="(optional) game version this is derived from")
 
-    parser.add_argument("-z", action="store", type=int, dest="zcount", default=-1,
+    parser.add_argument("-z", action="store", type=int, dest="zcount", default=10,
                         help="count for zombie variants (default x10")
-    parser.add_argument("-f", action="store", type=int, dest="fcount", default=-1,
+    parser.add_argument("-f", action="store", type=int, dest="fcount", default=10,
                         help="count for friendly animal variants (default x10)")
-    parser.add_argument("-e", action="store", type=int, dest="ecount", default=-1,
+    parser.add_argument("-e", action="store", type=int, dest="ecount", default=30,
                         help="count for enemy animal variants (default x30)")
 
     parser.add_argument("-m", action="store_true", dest="meshes", default=False,
@@ -2220,11 +2208,11 @@ def main():
     engine = RandEnt(args)
 
     engine.initial_setup()
-    engine.generate_lookup_tables()
+    engine.create_lookup_tables()
 
-    engine.zed_generate()
-    engine.enemy_animal_generate()
-    engine.friendly_animal_generate()
+    engine.generate_zombie()
+    engine.generate_enemy_animal()
+    engine.generate_friendly_animal()
 
     if not args.dryrun:
         engine.modlet_generate()
