@@ -100,10 +100,9 @@ class RandEnt(object):
         self.meshes = args.meshes
         if self.meshes:
             self.cmd += "-m "
-        self.mesh_always = args.mesh_always
-        if self.mesh_always:
-            self.meshes = True  # automatically turn it on
-            self.cmd += "--ma "
+        self.mesh_percent = float(args.mesh_percent) / 100.0
+        if args.mesh_percent != 33:
+            self.cmd += f"--mp {args.mesh_percent}"
 
         self.altered_ai = args.altered_ai
         if self.altered_ai:
@@ -161,6 +160,10 @@ class RandEnt(object):
         self.biggest = {}
         self.raging_stag_count = 0
         self.altered_ai_count = 0
+
+        self.research = args.research
+        if self.research:
+            self.cmd += "--research "
 
         self.prefix = ""
 
@@ -236,9 +239,11 @@ class RandEnt(object):
         tag3 = "_HS" if self.headshot else ""
         tag4 = "_AI" if self.altered_ai else ""
         tag5 = "_RS" if self.raging_stag else ""
+        tag6 = "_research" if self.research else ""
         gv = "" if self.game_version is None else f"-{self.game_version}"
-        self.CONFIGS['modlet_name'] = (f"{self.CONFIGS['modlet_name_prefix']}{tag}{tag2a}{tag2b}{tag3}{tag4}{tag5}"
-                                       f"{gv}")
+        self.CONFIGS['modlet_name'] = (
+            f"{self.CONFIGS['modlet_name_prefix']}{tag}{tag2a}{tag2b}{tag3}{tag4}{tag5}{tag6}"
+            f"{gv}")
         self.CONFIGS['modlet_gen_dir'] = self.repository + '/' + self.CONFIGS['modlet_name']
 
         # NOTE: Change from original, loops now controlled via command line
@@ -805,6 +810,11 @@ class RandEnt(object):
         :param is_enemy: True if hostile
         :return: modified entity
         """
+        # research mode, for checking materials
+        if self.research:
+            entity.attrib['trub_scale'] = "500"
+            return entity
+
         if self.no_scale:
             entity.attrib['trub_scale'] = "100"
             return entity
@@ -821,7 +831,7 @@ class RandEnt(object):
                 sizes = ["50", "60", "70", "80", "90", "100", "110", "120"]
             else:
                 sizes = ["40", "50", "60", "70"]
-        else: # normal variants
+        else:  # normal variants
             sizes = ["80", "90", "100", "110", "120"]
             if is_animal:
                 sizes += ["50", "60", "70", "130", "140", "150"]
@@ -1380,7 +1390,7 @@ class RandEnt(object):
         "animalDoe": True,
     }
 
-    def _add_details_count(self, key:str) -> None:
+    def _add_details_count(self, key: str) -> None:
         if key not in self.details:
             self.details[key] = 0
         self.details[key] += 1
@@ -1427,7 +1437,6 @@ class RandEnt(object):
 
         return entity
 
-
     MELEE1 = [
         "meleeHandAnimalWolf",
         "meleeHandAnimalBear",
@@ -1463,7 +1472,7 @@ class RandEnt(object):
         self._add_details_count(key)
 
         # add HandItem so it has something to work with
-        bite =  self.rand.choice(self.MELEE1 + self.MELEE2)
+        bite = self.rand.choice(self.MELEE1 + self.MELEE2)
         use[1].append(("HandItem", bite))
 
         key = f"Raging {original} Bite {bite}"
@@ -1499,65 +1508,162 @@ class RandEnt(object):
     #   "materials/occludeeshadowcaster"
     #   "materials/SoftGlow"
 
+    # solid = [
+    #     "entities/animals/vulture/materials/vulture_v2",
+    #     "entities/electrical/materials/flamethrowertrap",
+    #     "particleeffects/blood",
+    #     "#Other/Items?Misc/snowballPrefab/materials/snowball",
+    #     "entities/electrical/materials/electric_fence_post",
+    #     "particleeffects/materials/blood_mist_tile_02",
+    # ]
 
-    # transparent, picks up eye glow
-    transparent = [
-        "particleeffects/models/materials/p_glass",
-        "entities/buildings/materials/window_glass02_lod",
-    ]
-    # solid
-    solid = [
-        "entities/animals/vulture/materials/vulture_v2",
+    M_SOLID = [
         "entities/animals/boar/materials/grace",
-        "entities/resources/materials/orecoalboulder",
-        "entities/resources/materials/oreshaleboulder",
-        "entities/resources/materials/oreleadboulder",
-        "entities/gore/materials/torso_gore",
-        "particleeffects/models/materials/p_gib",
-        "particleeffects/models/car_explode",
-        "entities/electrical/materials/flamethrowertrap",
-        "shapes/materials/wrought_iron_metal",
-        "particleeffects/models/materials/p_dirt",
-        "particleeffects/models/materials/p_wood",
-        "entities/electrical/materials/spotlight",
-        "particleeffects/blood",
-        "entities/electrical/materials/solarpanel",
-        "#Other/Items?Misc/snowballPrefab/materials/snowball",
         "entities/buildings/materials/chimney",
         "entities/electrical/materials/electric_fence_post",
-        "particleeffects/materials/blood_mist_tile_02",
-        "entities/commercial/materials/metalpaintedwhite",
+        "entities/electrical/materials/flamethrowertrap",
+        "entities/electrical/materials/solarpanel",
+        "entities/electrical/materials/spotlight",
         "entities/furniture/materials/candelabra",
+        "entities/gore/materials/torso_gore",
+        "entities/resources/materials/orecoalboulder",
+        "entities/resources/materials/oreleadboulder",
+        "entities/resources/materials/oreshaleboulder",
+        "particleeffects/models/car_explode",
+        "particleeffects/models/materials/p_dirt",
+        "particleeffects/models/materials/p_gib",
+        "particleeffects/models/materials/p_wood",
+        "shapes/materials/cabinet_old_top_ft",
+        "shapes/materials/wrought_iron_metal",
     ]
-    # ephemeral
-    ephemeral = [
+
+    M_TRANS = [
+        "entities/buildings/materials/window_glass02_lod",
+        "entities/buildings/materials/window_store_glass",
         "materials/waterinbucket",
-        "itemmodeffects/materials/melee_fire",
-        "itemmodeffects/materials/baton_arc",  # don't use for body
-        "particleeffects/materials/waterfallslope",   # don't use for body
+        "particleeffects/models/materials/p_glass",
+        "particleeffects/materials/waterfallslope",
     ]
-    ephemeral_body = [
-        "materials/waterinbucket",
-        "itemmodeffects/materials/melee_fire",
-    ]
-    glowing = [
+
+    M_GLOW = [
         "#Entities/Zombies?Zombies/Materials/feral_eye.mat",
         "#Entities/Zombies?Zombies/Materials/feral_radiated.mat",
         "#Entities/Zombies?Zombies/Materials/rad_eye.mat",
+        "itemmodeffects/materials/baton_arc_fp",
         "itemmodeffects/materials/melee_fire",
         "materials/wirematerial",
         "particleeffects/materials/p_spark_electricity",
-        "itemmodeffects/materials/baton_arc_fp",
         "particleeffects/models/materials/electrical_arc",
     ]
 
-    choices0 = transparent + solid + ephemeral_body
+    # Keyed by entity:
+    #   (mat0, mat1, mat2): Group if allowed, None otherwise
+    MAT_ALLOWED = {
 
-    # usually eye effects, hair for others
-    choices1 = solid + glowing + ephemeral
+        "animalBear": (M_SOLID, M_GLOW, None), # body, eyes
+        "animalBoar": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalBossGrace": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalChicken": (M_SOLID, None, None),
+        "animalCoyote": (M_SOLID, M_GLOW + M_SOLID, None), # body, spots
+        "animalDireWolf": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalDoe": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalMountainLion": (M_SOLID, None, None),
+        "animalRabbit": (M_SOLID, None, None),
+        "animalSnake": (M_SOLID, None, None),
+        "animalStag": (M_SOLID, None, None),
+        "animalZombieBear": (M_SOLID, M_GLOW, None), # body, eyes
+        "animalWolf": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalZombieDog": (M_SOLID, M_GLOW, None), # body, eyes
+        "animalZombieVulture": (M_SOLID, None, None), # body
+        "animalZombieVultureRadiated": (M_SOLID, None, None), # body
 
-    # usually hair effects
-    choices2 = solid + ephemeral
+        "zombieArlene": (M_SOLID, None, None), # body
+        "zombieArleneFeral": (M_GLOW, None, None), # eyes
+        "zombieArleneRadiated": (M_SOLID, None, None), # body
+        "zombieBiker": (M_SOLID + M_GLOW, None, None),  # beard
+        "zombieBikerFeral": (M_SOLID + M_GLOW, None, None),  # beard
+        "zombieBikerRadiated": (M_SOLID + M_GLOW, None, None),  # beard
+        "zombieBoe": (M_SOLID, None, None), # body
+        "zombieBoeFeral": (M_SOLID, None, None), # body
+        "zombieBoeRadiated": (M_SOLID, None, None), # body
+        "zombieBurnt": (M_SOLID, None, None),
+        "zombieBurntFeral": (M_SOLID, None, None),
+        "zombieBurntRadiated": (M_SOLID, None, None),
+        "zombieBusinessMan": (M_SOLID + M_GLOW, None, None), # hair
+        "zombieBusinessManFeral": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieBusinessManRadiated": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieDarlene": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieDarleneFeral": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieDarleneRadiated": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieDemolition": (M_SOLID, M_GLOW, None),
+        "zombieFatCop": (M_SOLID, None, None), # body
+        "zombieFatCopFeral": (M_SOLID, None, M_GLOW), # body, ---, eyes
+        "zombieFatCopRadiated": (M_SOLID, None, None), # body
+        "zombieFatHawaiian": (M_SOLID, None, None), # body
+        "zombieFatHawaiianFeral": (M_SOLID, None, None), # body
+        "zombieFatHawaiianRadiated": (M_SOLID, None, None), # body
+        "zombieFemaleFat": (M_SOLID + M_GLOW, None, None),
+        "zombieFemaleFatFeral": (M_SOLID + M_GLOW, None, None),
+        "zombieFemaleFatRadiated": (M_SOLID + M_GLOW, None, None),
+        "zombieJanitor": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieJanitorFeral": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieJanitorRadiated": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieJoe": (M_SOLID + M_GLOW, None, None),
+        "zombieJoeFeral": (M_SOLID + M_GLOW, None, None),
+        "zombieJoeRadiated": (M_SOLID + M_GLOW, None, None),
+        "zombieLab": (M_SOLID, M_GLOW, M_SOLID + M_TRANS),
+        "zombieLabFeral": (M_SOLID, M_GLOW, M_SOLID + M_TRANS),
+        "zombieLabRadiated": (M_SOLID, M_GLOW, M_SOLID + M_TRANS),
+        "zombieLumberjack": (M_SOLID + M_GLOW, None, None), # beard
+        "zombieLumberjackFeral": (M_GLOW, None, None), # eyes
+        "zombieLumberjackRadiated": (M_SOLID + M_GLOW, None, None),
+        "zombieMarlene": (M_SOLID, None, None),
+        "zombieMarleneFeral": (M_SOLID, None, None),
+        "zombieMarleneRadiated": (M_SOLID, None, None),
+        "zombieMaleHazmat": (M_SOLID, None, None), # body
+        "zombieMaleHazmatFeral": (M_GLOW, None, None), # eyes
+        "zombieMaleHazmatRadiated": (M_SOLID, None, None), # body
+        "zombieMoe": (M_SOLID, M_GLOW + M_SOLID, None),  # body, hair
+        "zombieMoeFeral": (M_SOLID, M_GLOW + M_SOLID, None),  # body, hair
+        "zombieMoeRadiated": (M_SOLID, M_GLOW + M_SOLID, None),  # body, hair
+        "zombieMutated": (M_SOLID, None, None),
+        "zombieMutatedFeral": (M_SOLID, None, None),
+        "zombieMutatedRadiated": (M_SOLID, None, None),
+        "zombieNurse": (M_SOLID, None, None),  # body
+        "zombieNurseFeral": (M_SOLID, None, None),  # body
+        "zombieNurseRadiated": (M_SOLID, None, None),  # body
+        "zombiePartyGirl": (M_SOLID + M_GLOW, None, None),
+        "zombiePartyGirlFeral": (M_SOLID + M_GLOW, None, None),
+        "zombiePartyGirlRadiated": (M_SOLID + M_GLOW, None, None),
+        "zombieScreamer": (M_SOLID, None, None),
+        "zombieScreamerFeral": (M_SOLID, None, None),
+        "zombieScreamerRadiated": (M_SOLID, None, None),
+        "zombieSkateboarder": (M_SOLID, None, None),  # body
+        "zombieSkateboarderFeral": (M_SOLID, None, None),  # body
+        "zombieSkateboarderRadiated": (M_SOLID, None, None),  # body
+        "zombieSoldier": (M_SOLID, M_GLOW, None), # body
+        "zombieSoldierFeral": (M_SOLID, None, None),
+        "zombieSoldierRadiated": (M_SOLID, None, None),
+        "zombieSpider": (M_SOLID, None, None), # body
+        "zombieSpiderFeral": (M_SOLID, None, None), # body
+        "zombieSpiderRadiated": (M_SOLID, None, None), # body
+        "zombieSteve": (M_SOLID, M_GLOW, None),   # body, eyes
+        "zombieSteveCrawler": (M_SOLID, M_GLOW, None),
+        "zombieSteveCrawlerFeral": (M_SOLID, M_GLOW, None),  # body, eyes
+        "zombieSteveFeral": (M_SOLID, M_GLOW, None),  # body, eyes
+        "zombieSteveRadiated": (M_SOLID, M_GLOW, None),  # body, eyes
+        "zombieTomClark": (M_SOLID, None, None), # body
+        "zombieTomClarkFeral": (M_SOLID, None, None), # body
+        "zombieTomClarkRadiated": (M_SOLID, None, None), # body
+        "zombieUtilityWorker": (M_SOLID, None, None), # body
+        "zombieUtilityWorkerFeral": (M_GLOW, None, None), # eyes
+        "zombieUtilityWorkerRadiated": (M_GLOW, None, None),# body
+        "zombieWightFeral": (M_GLOW, None, None),
+        "zombieWightRadiated": (M_GLOW, None, None),
+        "zombieYo": (M_SOLID, M_GLOW, None), # body, hair
+        "zombieYoFeral": (M_SOLID, M_GLOW, None), # body, hair
+        "zombieYoRadiated": (M_SOLID, M_GLOW, None), # body, hair
+    }
 
     # structure to cut down on duplicate variants
     seen_variations = {}
@@ -1568,59 +1674,43 @@ class RandEnt(object):
 
         Enabled with --meshes
 
-        NOTES:
-        Material0 is likely overall body
-        Material1 is likely eye coloring
-        Material2 is possibly particle effects or hair
-
         :param entity: source element
         :param is_enemy: True if zombie or hostile animal
         :return: modified element
         """
         entity_name = entity.attrib.get('original_name', None)
 
-        chance = 0.5 if not self.mesh_always else 1.0
+        ## Check to see if material allowed
+        if entity_name not in self.MAT_ALLOWED:
+            logger.error(f"`{entity_name}` not seen for freaky materials!")
+        else:
+            grp0 = self.MAT_ALLOWED[entity_name][0]
+            grp1 = self.MAT_ALLOWED[entity_name][1]
+            grp2 = self.MAT_ALLOWED[entity_name][2]
+
+        chance = self.mesh_percent
+        if self.research:
+            chance = 1.0
 
         three_strikes = 0  # used to prevent endless looping on material choice
-        choice0 = None
-        choice1 = None
-        choice2 = None
-
-        # not sure if these are even used, adding just in case
-        choice3 = None
-        choice4 = None
-        choice5 = None
 
         key = ""
         while three_strikes < 3:
-            # chance of material0
-            if self.rand.random() < chance and is_enemy:
-                choice0 = self.rand.choice(self.choices0)
+            choice0 = None
+            choice1 = None
+            choice2 = None
 
-            # chance of material1, automatic if material0 changed
-            if (self.rand.random() < chance or choice0 is not None) and is_enemy:
-                if choice0 in self.transparent or choice0 in self.glowing or choice0 in self.ephemeral:
-                    choice1 = self.rand.choice(self.solid)  # no glowy if transparent or glowy
-                elif choice0 in self.solid:
-                    choice1 = self.rand.choice(self.glowing)
-                else:
-                    choice1 = self.rand.choice(self.choices1)
+            # chance of material0
+            if grp0 is not None and self.rand.random() < chance and is_enemy:
+                choice0 = self.rand.choice(grp0)
+
+            # chance of material1
+            if grp1 is not None and self.rand.random() < chance and is_enemy:
+                choice1 = self.rand.choice(grp1)
 
             # chance of material2
-            if self.rand.random() < chance and is_enemy:
-                choice2 = self.rand.choice(self.choices2)
-
-            # chance of material3
-            if self.rand.random() < chance and is_enemy:
-                choice3 = self.rand.choice(self.choices1)
-
-            # chance of material4
-            if self.rand.random() < chance and is_enemy:
-                choice4 = self.rand.choice(self.choices1)
-
-            # chance of material5
-            if self.rand.random() < chance and is_enemy:
-                choice5 = self.rand.choice(self.choices1)
+            if grp2 is not None and self.rand.random() < chance and is_enemy:
+                choice2 = self.rand.choice(grp2)
 
             key = f"{entity_name}-{choice0}-{choice1}-{choice2}"
             if choice0 is None and choice1 is None and choice2 is None:
@@ -1642,16 +1732,6 @@ class RandEnt(object):
                                                   replacable=True)
         if choice2 is not None:
             entity = self.add_property_if_missing(entity, "ReplaceMaterial2", choice2,
-                                                  replacable=True)
-
-        if choice3 is not None:
-            entity = self.add_property_if_missing(entity, "ReplaceMaterial3", choice3,
-                                                  replacable=True)
-        if choice4 is not None:
-            entity = self.add_property_if_missing(entity, "ReplaceMaterial4", choice4,
-                                                  replacable=True)
-        if choice5 is not None:
-            entity = self.add_property_if_missing(entity, "ReplaceMaterial5", choice5,
                                                   replacable=True)
 
         return entity
@@ -1722,6 +1802,8 @@ class RandEnt(object):
             elif rand_function_key == 'custom_MassAndWeightAndSizeScale':
                 new_entity = self.vary_size_and_mass(new_entity, args)
             elif rand_function_key == 'custom_HealthAndExperienceGain':
+                if self.research:
+                    new_entity = self.vary_health_and_exp(new_entity, args, 0.01, pow(self.hsmeat, 0.5))
                 if self.headshot and not is_animal:  # headshot shamblers only
                     new_entity = self.vary_health_and_exp(new_entity, args, self.hsmeat, pow(self.hsmeat, 0.5))
                 else:
@@ -1737,6 +1819,8 @@ class RandEnt(object):
                         use_scale = self.hsspeed
                     if self.munchkins and cfg_property_key == "MoveSpeedAggro":
                         use_scale = int(10000.0 / float(self.get_trub_scale(new_entity)) + 0.5)
+                    if self.research:  # extra slow to allow for examination
+                        use_scale = 1
                     use_args['scale'] = str(use_scale)
                 new_entity = self.randomize_ranged_property_from_dual_ranges(new_entity, cfg_property_key,
                                                                              use_args)
@@ -1749,6 +1833,8 @@ class RandEnt(object):
                     use_scale = self.hsspeed
                 if not is_animal and self.munchkins:
                     use_scale = int(10000.0 / float(self.get_trub_scale(new_entity)) + 0.5)
+                if self.research:  # extra slow to allow for examination
+                    use_scale = 1
                 if use_scale != 100:
                     new_entity = self.scale_property(new_entity, cfg_property_key,
                                                      {'pct_random_int': f"{use_scale}",
@@ -1760,7 +1846,10 @@ class RandEnt(object):
 
         # additions for odd strange zombies and hostile animals
         if self.meshes:
-            new_entity = self.modify_materials(new_entity, is_enemy)
+            if self.research:
+                self.modify_materials(new_entity, True)
+            else:
+                new_entity = self.modify_materials(new_entity, is_enemy)
 
         # handle size affecting harvesting
         new_entity = self.modify_harvestables(new_entity)
@@ -2049,8 +2138,8 @@ class RandEnt(object):
                 fp.write(f" - no size variations\n")
             if self.meshes:
                 fp.write(f" - with freak meshes\n")
-            if self.mesh_always:
-                fp.write(f"    - 100% chance\n")
+                chance = int(self.mesh_percent * 100)
+                fp.write(f" - with {chance}% possible freaky mesh\n")
             if self.altered_ai:
                 chance = int(self.altered_ai_percent * 100)
                 fp.write(f" - with {chance}% possible altered hostile AI\n")
@@ -2071,6 +2160,8 @@ class RandEnt(object):
                 fp.write(f"    - headshot power {self.hspower}%\n")
                 fp.write(f"    - zombie meat {self.hsmeat}x\n")
                 fp.write(f"    - zombie speed {self.hsspeed}%\n")
+            if self.research:
+                fp.write(f" - with research mode\n")
             fp.write("\n--------------------------------------------------\n")
             fp.write("BIGGEST:\n")
             for n, v in sorted(self.biggest.items()):
@@ -2078,9 +2169,9 @@ class RandEnt(object):
             fp.write("\n--------------------------------------------------\n")
             fp.write("OTHER DETAILS:\n")
             maxkey = 0
-            for k,v in sorted(self.details.items()):
+            for k, v in sorted(self.details.items()):
                 maxkey = max(maxkey, len(k))
-            for k,v in sorted(self.details.items()):
+            for k, v in sorted(self.details.items()):
                 fp.write(f"   {k:{maxkey}s} - {v}\n")
 
     def modlet_generate(self) -> None:
@@ -2146,9 +2237,9 @@ def build_cli_parser() -> argparse.Namespace:
                         help="count for enemy animal variants (default x30)")
 
     parser.add_argument("-m", action="store_true", dest="meshes", default=False,
-                        help="If specified enable freaky meshes")
-    parser.add_argument("--ma", action="store_true", dest="mesh_always", default=False,
-                        help="If specified, all mesh variants are 100% freaks (instead of 33% chance for each area)")
+                        help="If specified enable freaky meshes (default 33%)")
+    parser.add_argument("--mp", action="store", dest="mesh_percent", default=33,
+                        help="Specify chance of freaky mesh")
 
     parser.add_argument("-g", action="store_true", dest="giants", default=False,
                         help="If specified, land of the giants")
@@ -2176,6 +2267,9 @@ def build_cli_parser() -> argparse.Namespace:
                         help="If specified, chance of hostile AI for stags (default 33%)")
     parser.add_argument("--rp", action="store", type=int, dest="raging_stag_percent", default=33,
                         help="Specify chance of raging stags")
+
+    parser.add_argument("--research", action="store_true", dest="research", default=False,
+                        help="If specified, 500% size, 1% move, move mode 2")
 
     args = parser.parse_args()
 
