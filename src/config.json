@@ -107,6 +107,12 @@
       "high":"1.50"
     },
 
+    "SwimSpeed": {
+      "rand_function":"setcreate_one_range",
+      "low":"0.5",
+      "high":"1.50"
+    },
+
     "MoveSpeedPanic":{
       "rand_function":"setcreate_one_range",
       "low":"0.60",
@@ -245,6 +251,8 @@
     },
     "HealthAndExperienceGain": {},
     "MoveSpeed": {},
+    "MoveSpeedPanic": {},
+    "SwimSpeed": {},
     "MoveSpeedAggro": {},
     "AttackTimeoutDay": {},
     "AttackTimeoutNight": {},
@@ -277,6 +285,8 @@
     },
     "HealthAndExperienceGain": {},
     "MoveSpeed": {},
+    "MoveSpeedPanic": {},
+    "SwimSpeed": {},
     "SightRange": {
       "pct_random_int":"20",
       "default":"20"
@@ -400,6 +410,8 @@
     "HealthAndExperienceGain": {},
     "LegCrawlerThreshold": {},
     "MoveSpeed": {},
+    "SwimSpeed": {},
+    "MoveSpeedPanic": {},
     "MoveSpeedAggro": {},
     "TintMaterial": {},
     "AttackTimeoutDay": {},

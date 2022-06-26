@@ -15,119 +15,180 @@ When created, several useful file are created for general reference (but have no
 ### 2.1. settings.info
 This file contains some information about what was generated and the options used (if any).
 ```text
-Options Used: -m -r --hs 
+Options Used: -m -a -r 
 
 x 10 zombie variants (860)
 x 10 timid animal variants (40)
 x 30 hostile animal variants (360)
- - with freak meshes
- - with 25% possible stag has hostile AI
-   ... 3 raging stags
- - with Headshot mode
-    - headshot power 150%
-    - zombie meat 3.0x
-    - zombie speed 25%
+ - with 33% possible freaky mesh
+   ... 411 freak entities
+ - with 33% possible altered hostile AI
+   ... 76 hostile animal behaviors changed
+ - with 33% possible stag has hostile AI
+   ... 4 raging stags
 
 --------------------------------------------------
 BIGGEST:
-   animalBear                     -  3559 hp
-   animalBoar                     -   539 hp
-   animalBossGrace                -  4492 hp
-   animalChicken                  -    50 hp
+   animalBear                     -  3120 hp
+   animalBoar                     -   469 hp
+   animalBossGrace                -  4478 hp
+   animalChicken                  -    47 hp
    animalCoyote                   -   225 hp
-   animalDireWolf                 -  1646 hp
-   animalDoe                      -   258 hp
-   animalRabbit                   -    17 hp
-   animalSnake                    -    19 hp
-   animalStag                     -   472 hp
-   animalWolf                     -   412 hp
-   animalZombieBear               -  3811 hp
-   animalZombieDog                -   430 hp
+   animalDireWolf                 -  1609 hp
+   animalDoe                      -   218 hp
+   animalRabbit                   -    43 hp
+   animalSnake                    -    21 hp
+   animalStag                     -   504 hp
+   animalWolf                     -   409 hp
+   animalZombieBear               -  4170 hp
+   animalZombieDog                -   448 hp
    animalZombieVulture            -    64 hp
-   animalZombieVultureRadiated    -   242 hp
-   zombieArlene                   -   152 hp
-   zombieArleneFeral              -   298 hp
-   zombieArleneRadiated           -   574 hp
-   zombieBiker                    -   359 hp
-   zombieBikerFeral               -   761 hp
-   zombieBikerRadiated            -  1456 hp
-   zombieBoe                      -   205 hp
-   zombieBoeFeral                 -   396 hp
-   zombieBoeRadiated              -   660 hp
-   zombieBurnt                    -   154 hp
-   zombieBurntFeral               -   342 hp
-   zombieBurntRadiated            -   576 hp
-   zombieBusinessMan              -   157 hp
-   zombieBusinessManFeral         -   309 hp
-   zombieBusinessManRadiated      -  1183 hp
-   zombieDarlene                  -   201 hp
-   zombieDarleneFeral             -   354 hp
-   zombieDarleneRadiated          -   659 hp
-   zombieDemolition               -  1120 hp
-   zombieFatCop                   -   349 hp
-   zombieFatCopFeral              -   661 hp
-   zombieFatCopRadiated           -  1346 hp
-   zombieFatHawaiian              -   401 hp
-   zombieFatHawaiianFeral         -   766 hp
-   zombieFatHawaiianRadiated      -  1456 hp
-   zombieFemaleFat                -   413 hp
-   zombieFemaleFatFeral           -   737 hp
-   zombieFemaleFatRadiated        -  1409 hp
-   zombieJanitor                  -   169 hp
-   zombieJanitorFeral             -   377 hp
-   zombieJanitorRadiated          -   673 hp
-   zombieJoe                      -   171 hp
-   zombieJoeFeral                 -   288 hp
-   zombieJoeRadiated              -   644 hp
-   zombieLab                      -   179 hp
-   zombieLabFeral                 -   412 hp
-   zombieLabRadiated              -   708 hp
-   zombieLumberjack               -   424 hp
-   zombieLumberjackFeral          -   783 hp
-   zombieLumberjackRadiated       -  1274 hp
-   zombieMarlene                  -   159 hp
-   zombieMarleneFeral             -   286 hp
-   zombieMarleneRadiated          -   490 hp
-   zombieMoe                      -   201 hp
-   zombieMoeFeral                 -   350 hp
-   zombieMoeRadiated              -   698 hp
-   zombieMutated                  -   188 hp
-   zombieMutatedFeral             -   389 hp
-   zombieMutatedRadiated          -   745 hp
-   zombieNurse                    -   154 hp
-   zombieNurseFeral               -   312 hp
-   zombieNurseRadiated            -   495 hp
-   zombiePartyGirl                -   172 hp
-   zombiePartyGirlFeral           -   334 hp
-   zombiePartyGirlRadiated        -   631 hp
-   zombieScreamer                 -    89 hp
-   zombieScreamerFeral            -   204 hp
-   zombieScreamerRadiated         -   317 hp
-   zombieSkateboarder             -   300 hp
-   zombieSkateboarderFeral        -   542 hp
-   zombieSkateboarderRadiated     -  1076 hp
-   zombieSoldier                  -   200 hp
-   zombieSoldierFeral             -   389 hp
-   zombieSoldierRadiated          -   707 hp
-   zombieSpider                   -   163 hp
-   zombieSpiderFeral              -   335 hp
-   zombieSpiderRadiated           -   494 hp
-   zombieSteve                    -   180 hp
-   zombieSteveCrawler             -   103 hp
-   zombieSteveCrawlerFeral        -   179 hp
-   zombieSteveFeral               -   318 hp
-   zombieSteveRadiated            -   575 hp
-   zombieTomClark                 -   173 hp
-   zombieTomClarkFeral            -   272 hp
-   zombieTomClarkRadiated         -   613 hp
-   zombieUtilityWorker            -   206 hp
-   zombieUtilityWorkerFeral       -   373 hp
-   zombieUtilityWorkerRadiated    -  1259 hp
-   zombieWightFeral               -   545 hp
-   zombieWightRadiated            -   953 hp
-   zombieYo                       -   213 hp
-   zombieYoFeral                  -   380 hp
-   zombieYoRadiated               -   630 hp
+   animalZombieVultureRadiated    -   213 hp
+   zombieArlene                   -   169 hp
+   zombieArleneFeral              -   342 hp
+   zombieArleneRadiated           -   623 hp
+   zombieBiker                    -   412 hp
+   zombieBikerFeral               -   752 hp
+   zombieBikerRadiated            -  1426 hp
+   zombieBoe                      -   231 hp
+   zombieBoeFeral                 -   432 hp
+   zombieBoeRadiated              -   722 hp
+   zombieBurnt                    -   188 hp
+   zombieBurntFeral               -   328 hp
+   zombieBurntRadiated            -   640 hp
+   zombieBusinessMan              -   165 hp
+   zombieBusinessManFeral         -   337 hp
+   zombieBusinessManRadiated      -  1232 hp
+   zombieDarlene                  -   220 hp
+   zombieDarleneFeral             -   413 hp
+   zombieDarleneRadiated          -   840 hp
+   zombieDemolition               -  1344 hp
+   zombieFatCop                   -   448 hp
+   zombieFatCopFeral              -   736 hp
+   zombieFatCopRadiated           -  1375 hp
+   zombieFatHawaiian              -   429 hp
+   zombieFatHawaiianFeral         -   615 hp
+   zombieFatHawaiianRadiated      -  1525 hp
+   zombieFemaleFat                -   461 hp
+   zombieFemaleFatFeral           -   832 hp
+   zombieFemaleFatRadiated        -  1636 hp
+   zombieJanitor                  -   228 hp
+   zombieJanitorFeral             -   431 hp
+   zombieJanitorRadiated          -   816 hp
+   zombieJoe                      -   191 hp
+   zombieJoeFeral                 -   346 hp
+   zombieJoeRadiated              -   604 hp
+   zombieLab                      -   186 hp
+   zombieLabFeral                 -   428 hp
+   zombieLabRadiated              -   707 hp
+   zombieLumberjack               -   417 hp
+   zombieLumberjackFeral          -   780 hp
+   zombieLumberjackRadiated       -  1302 hp
+   zombieMarlene                  -   169 hp
+   zombieMarleneFeral             -   332 hp
+   zombieMarleneRadiated          -   632 hp
+   zombieMoe                      -   218 hp
+   zombieMoeFeral                 -   430 hp
+   zombieMoeRadiated              -   734 hp
+   zombieMutated                  -   212 hp
+   zombieMutatedFeral             -   374 hp
+   zombieMutatedRadiated          -   721 hp
+   zombieNurse                    -   139 hp
+   zombieNurseFeral               -   311 hp
+   zombieNurseRadiated            -   668 hp
+   zombiePartyGirl                -   182 hp
+   zombiePartyGirlFeral           -   297 hp
+   zombiePartyGirlRadiated        -   700 hp
+   zombieScreamer                 -   103 hp
+   zombieScreamerFeral            -   196 hp
+   zombieScreamerRadiated         -   339 hp
+   zombieSkateboarder             -   311 hp
+   zombieSkateboarderFeral        -   656 hp
+   zombieSkateboarderRadiated     -  1225 hp
+   zombieSoldier                  -   203 hp
+   zombieSoldierFeral             -   442 hp
+   zombieSoldierRadiated          -   744 hp
+   zombieSpider                   -   187 hp
+   zombieSpiderFeral              -   352 hp
+   zombieSpiderRadiated           -   578 hp
+   zombieSteve                    -   181 hp
+   zombieSteveCrawler             -    99 hp
+   zombieSteveCrawlerFeral        -   232 hp
+   zombieSteveFeral               -   298 hp
+   zombieSteveRadiated            -   627 hp
+   zombieTomClark                 -   158 hp
+   zombieTomClarkFeral            -   368 hp
+   zombieTomClarkRadiated         -   564 hp
+   zombieUtilityWorker            -   177 hp
+   zombieUtilityWorkerFeral       -   431 hp
+   zombieUtilityWorkerRadiated    -  1229 hp
+   zombieWightFeral               -   508 hp
+   zombieWightRadiated            -  1240 hp
+   zombieYo                       -   182 hp
+   zombieYoFeral                  -   430 hp
+   zombieYoRadiated               -   779 hp
+
+--------------------------------------------------
+OTHER DETAILS:
+   Raging animalStag Bite meleeHandAnimalBear      - 1
+   Raging animalStag Bite meleeHandAnimalDireWolf  - 1
+   Raging animalStag Bite meleeHandAnimalZombieDog - 1
+   Raging animalStag Bite meleeHandBossGrace       - 1
+   animalBear (animalDireWolf AI)                  - 1
+   animalBear (animalWolf AI)                      - 2
+   animalBear (animalZombieBear AI)                - 2
+   animalBear (animalZombieDog AI)                 - 2
+   animalBear (zombieSpider AI)                    - 1
+   animalBear (zombieTemplateMale AI)              - 1
+   animalBoar (animalBear AI)                      - 2
+   animalBoar (animalBossGrace AI)                 - 1
+   animalBoar (animalDireWolf AI)                  - 2
+   animalBoar (animalMountainLion AI)              - 2
+   animalBoar (animalSnake AI)                     - 2
+   animalBoar (animalZombieBear AI)                - 2
+   animalBoar (zombieFatCop AI)                    - 1
+   animalBoar (zombieSpider AI)                    - 1
+   animalBoar (zombieTemplateMale AI)              - 1
+   animalBossGrace (animalDireWolf AI)             - 2
+   animalBossGrace (animalSnake AI)                - 1
+   animalBossGrace (animalWolf AI)                 - 1
+   animalBossGrace (animalZombieBear AI)           - 1
+   animalBossGrace (zombieSpider AI)               - 1
+   animalCoyote (animalBear AI)                    - 1
+   animalCoyote (animalBossGrace AI)               - 1
+   animalCoyote (animalDireWolf AI)                - 1
+   animalCoyote (animalSnake AI)                   - 1
+   animalCoyote (animalZombieBear AI)              - 2
+   animalCoyote (animalZombieDog AI)               - 2
+   animalCoyote (zombieSpider AI)                  - 1
+   animalCoyote (zombieTemplateMale AI)            - 1
+   animalDireWolf (animalBossGrace AI)             - 1
+   animalDireWolf (animalSnake AI)                 - 2
+   animalDireWolf (animalWolf AI)                  - 1
+   animalDireWolf (animalZombieBear AI)            - 3
+   animalDireWolf (zombieFatCop AI)                - 3
+   animalDireWolf (zombieTemplateMale AI)          - 2
+   animalMountainLion (animalBear AI)              - 1
+   animalMountainLion (animalBossGrace AI)         - 2
+   animalMountainLion (animalWolf AI)              - 1
+   animalMountainLion (animalZombieDog AI)         - 1
+   animalMountainLion (zombieFatCop AI)            - 1
+   animalMountainLion (zombieTemplateMale AI)      - 1
+   animalSnake (animalBear AI)                     - 2
+   animalSnake (animalBossGrace AI)                - 1
+   animalSnake (animalDireWolf AI)                 - 3
+   animalSnake (animalMountainLion AI)             - 2
+   animalSnake (zombieTemplateMale AI)             - 1
+   animalStag (animalBossGrace AI)                 - 1
+   animalStag (animalDireWolf AI)                  - 1
+   animalStag (animalWolf AI)                      - 1
+   animalStag (animalZombieBear AI)                - 1
+   animalWolf (animalBossGrace AI)                 - 2
+   animalWolf (animalDireWolf AI)                  - 1
+   animalWolf (animalMountainLion AI)              - 1
+   animalWolf (animalZombieBear AI)                - 2
+   animalWolf (zombieFatCop AI)                    - 1
+   animalWolf (zombieSpider AI)                    - 2
 ```
 
 ### 2.2. entities.info 
@@ -289,8 +350,8 @@ This option allows for some alternate zombie forms as seen in mods created by Ro
 #### 3.3.1. -m
 This option enables the creation of zombies and hostile animal variants with a chance of having their texture changed to something other than the normal mesh.  This can produce some very odd entities with a "fire elemental", "mummy" or "glass" look to them. 
 
-#### 3.3.2. -ma
-If specified this enables the -m option and also assures that any variant will have a mesh applied to their textures (instead of the 50% used for `-m`).
+#### 3.3.2. -mp
+If specified this allows you to specify the percent chance of freak material for an entity, from 1 to 100.  If not used, the default is 33.
 
 ### 3.4. Sizing Options
 By default this variant tries to alter the entity size by some degree so as to produce a better variety.  For zombies this is done by altering their scale to one of  85%, 90%, 95%, 100%, 105%, 110%, and 115%.  Animals have additional possibilities of 50%, 75%, 125%, and 150%, with timid animals having an additional chance of 200%, and 250%.  This can produce seemingly "baby animals", along with huge wolves and "riding chickens".
@@ -334,7 +395,7 @@ This option allows you to modify the overall toughness of the the entity, making
 This option allows you modify the movement speed for zombies in this mode.  This is on top of any speed variations applied by the program itself. If not specified, the default value is 25 (25% speed).
 
 ### 3.6. Altered AI Options
-In order to mix things up a bit, this option can be used to tweak the AI of some hostile animals and zombies.  What it does is to have a 33% chance of choosing a different AI and swapping it out.  Thus you could have pigs that act like mountain lions, or fat cops that act like coyotes.
+In order to mix things up a bit, this option can be used to tweak the AI of some hostile animals and zombies.  What it does is to have a 33% chance of choosing a different AI and swapping it out.  Thus you could have pigs that act like mountain lions, or fat cops that act like snakes.
 
 #### 3.6.1. -a
 This option enables the generation of altered AI.
