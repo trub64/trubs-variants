@@ -7,6 +7,7 @@ import argparse
 import copy
 import json
 import logging
+import math
 import os
 import pwd
 import random
@@ -51,6 +52,8 @@ class RandEnt(object):
     ENTITYCLASSES_DOM: ET.Element = None  # inventory of entity classes
     ENTITYGROUPS_DOM: ET.Element = None  # inventory of entity groups
 
+    ENTITY_INVENTORY = {}
+
     ENTITY_TYPE_LOOKUP = {}
     TYPE_ENTITY_LOOKUP = {}
 
@@ -84,41 +87,39 @@ class RandEnt(object):
 
         # process command line options
         self.cmd = ""
-        if args.zcount > 0:
-            self.zcount = args.zcount
+
+        self.zcount = args.zcount
+        if args.zcount != 10:
             self.cmd += f"-z {self.zcount} "
-        else:
-            self.zcount = 10
-        if args.fcount > 0:
-            self.fcount = args.fcount
+
+        self.fcount = args.fcount
+        if args.fcount != 10:
             self.cmd += f"-f {self.fcount} "
-        else:
-            self.fcount = 10
-        if args.ecount > 0:
-            self.ecount = args.ecount
+
+        self.ecount = args.ecount
+        if args.ecount != 30:
             self.cmd += f"-e {self.ecount}"
-        else:
-            self.ecount = 30
 
         self.meshes = args.meshes
         if self.meshes:
             self.cmd += "-m "
-        self.mesh_always = args.mesh_always
-        if self.mesh_always:
-            self.meshes = True  # automatically turn it on
-            self.cmd += "--ma "
+        self.mesh_percent = float(args.mesh_percent) / 100.0
+        if args.mesh_percent != 33:
+            self.cmd += f"--mp {args.mesh_percent}"
 
         self.altered_ai = args.altered_ai
         if self.altered_ai:
             self.cmd += "-a "
         self.altered_ai_percent = float(args.altered_ai_percent) / 100.0
-        self.cmd += f"--ap {args.altered_ai_percent}"
+        if args.altered_ai_percent != 33:
+            self.cmd += f"--ap {args.altered_ai_percent}"
 
         self.raging_stag = args.raging_stag
         if self.raging_stag:
             self.cmd += "-r "
         self.raging_stag_percent = float(args.raging_stag_percent) / 100.0
-        self.cmd += f"--rp {args.raging_stag_percent}"
+        if args.raging_stag_percent != 33:
+            self.cmd += f"--rp {args.raging_stag_percent}"
 
         self.giants = args.giants
         if self.giants:
@@ -162,8 +163,20 @@ class RandEnt(object):
         self.biggest = {}
         self.raging_stag_count = 0
         self.altered_ai_count = 0
+        self.freak_count = 0
+
+        self.research = args.research
+        if self.research:
+            self.cmd += "--research "
+
+        self.errornull = args.errornull
+        if self.errornull:
+            self.cmd += "--en0 "
 
         self.prefix = ""
+
+        # hold info about the generation
+        self.details = {}
 
     # --- Validation ------------------------------------------------------------
 
@@ -220,17 +233,6 @@ class RandEnt(object):
         self.check_dir(self.CONFIGS['game_config_dir'], 'game_config_dir')
         # self.CONFIGS['using_config_dir'] = self.CONFIGS['game_config_dir']
 
-        # REMOVED: not using saved games
-        # # OVERRIDE! Determine if we should use a saved game (with entities from other mods) for entity generation
-        # if self.CONFIGS['use_save_game'] != "":  # can be blank, but if something in it, use it!
-        #     self.check_config('game_saves_dir')  # can be blank
-        #     logger.info(f"use_save_game set. Using save game for configs: {self.CONFIGS['use_save_game']}")
-        #     self.check_dir(self.CONFIGS['game_saves_dir'], 'game_saves_dir')
-        #     self.CONFIGS['saved_game_dir'] = self.CONFIGS['game_saves_dir'] + "/" + self.CONFIGS[
-        #         'use_save_game'] + "/ConfigsDump"
-        #     self.check_dir(self.CONFIGS['saved_game_dir'], 'saved_game_dir')
-        #     self.CONFIGS['using_config_dir'] = self.CONFIGS['saved_game_dir']
-
         # Note: Here is where we pull the XML configs from!
         self.CONFIGS['entityclasses_file'] = self.CONFIGS['game_config_dir'] + '/entityclasses.xml'
         self.check_file(self.CONFIGS['entityclasses_file'], 'entityclasses_file')
@@ -248,9 +250,12 @@ class RandEnt(object):
         tag3 = "_HS" if self.headshot else ""
         tag4 = "_AI" if self.altered_ai else ""
         tag5 = "_RS" if self.raging_stag else ""
+        tag6 = "_research" if self.research else ""
+        tag7 = "_en0" if self.errornull else ""
         gv = "" if self.game_version is None else f"-{self.game_version}"
-        self.CONFIGS['modlet_name'] = (f"{self.CONFIGS['modlet_name_prefix']}{tag}{tag2a}{tag2b}{tag3}{tag4}{tag5}"
-                                       f"{gv}")
+        self.CONFIGS['modlet_name'] = (
+            f"{self.CONFIGS['modlet_name_prefix']}{tag}{tag2a}{tag2b}{tag3}{tag4}{tag5}{tag6}{tag7}"
+            f"{gv}")
         self.CONFIGS['modlet_gen_dir'] = self.repository + '/' + self.CONFIGS['modlet_name']
 
         # NOTE: Change from original, loops now controlled via command line
@@ -283,7 +288,7 @@ class RandEnt(object):
         self.ENTITYCLASSES_DOM = ET.parse(self.CONFIGS['entityclasses_file']).getroot()
         self.ENTITYGROUPS_DOM = ET.parse(self.CONFIGS['entitygroups_file']).getroot()
 
-    def populate_entity_type_lookup(self) -> bool:
+    def create_entity_type_lookup(self) -> bool:
         """
         Loop through Entities, and create the ENTITY_TYPE_LOOKUP table
         
@@ -295,6 +300,8 @@ class RandEnt(object):
         for entity in self.ENTITYCLASSES_DOM.findall('entity_class'):
             entity_name = entity.attrib['name']
             logger.debug(f"Found entity Name: {entity_name}")
+
+            self.ENTITY_INVENTORY[entity_name] = entity
 
             # First, see what type it is
             found_type = False
@@ -325,7 +332,7 @@ class RandEnt(object):
 
         return lookup_type_failures
 
-    def populate_type_entity_lookup(self) -> None:
+    def create_type_entity_lookup(self) -> None:
         """
         build the reverse lookup TYPE_ENTITY_LOOKUP.
         """
@@ -340,13 +347,13 @@ class RandEnt(object):
 
             self.TYPE_ENTITY_LOOKUP[value].append(entity_type_lookup_key)
 
-    def generate_lookup_tables(self) -> None:
+    def create_lookup_tables(self) -> None:
         """
         Loop all entity types until we have populated ENTITY_TYPE_LOOKUP with all types
         """
         counter = 1
         while counter > 0:
-            if not self.populate_entity_type_lookup():
+            if not self.create_entity_type_lookup():
                 break
 
             if counter > POPULATE_ENTITY_TYPE_LOOKUP_MAX_LOOPS:
@@ -355,7 +362,7 @@ class RandEnt(object):
 
             counter += 1
 
-        self.populate_type_entity_lookup()
+        self.create_type_entity_lookup()
 
         for key, value in self.TYPE_ENTITY_LOOKUP.items():
             logger.debug(f"{key} => {value}")
@@ -513,14 +520,14 @@ class RandEnt(object):
             5 = Marlene, Joe, Janitor, Yo
             6 = Steve, Utility
             7 = Default, Nurse, Businessman, Burnt, Lab, Biker, Hazmat
-            8 = Spider (monkey! -- don't use)
+            8 = Spider (monkey!)
             9 = Behemouth (possible men in the street? -- don't use)
         zombieSteveCrawlerFeral = WalkType not set, its inherited...sigh
         
         :param entity: source entity
         :return: updated entity
         """
-        rand_walk_type = self.rand.choice([1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7])
+        rand_walk_type = self.rand.choice([1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8])
 
         # Make sure we dont generate too many crawlers. looks weird.
         if rand_walk_type == 4:
@@ -703,30 +710,6 @@ class RandEnt(object):
 
         return new_num
 
-    @staticmethod
-    def scale_given_number(num: str, mult: str, num_decimals: int, cap: float = None) -> str:
-        """
-        Take a given number and scale it by the provided mutiplier.
-        
-        :param num: source number as string (int or float)
-        :param mult: multiplier (integer value where 100 = 100%)
-        :param num_decimals: max decimal places
-        :param cap: If specified, maximum value
-        :return: formatted result string
-        """
-        rand_pct_float = float(mult) / 100.0
-        new_num_float = float(num) * rand_pct_float
-        if cap is not None:
-            new_num_float = min(new_num_float, cap)
-
-        # Force to x decimal places e.g. .346. 0 = no decimals
-        if num_decimals == 0:
-            new_num_float = f"{int(new_num_float):d}"
-        else:
-            new_num_float = f"{new_num_float:.{num_decimals}f}"
-
-        return new_num_float
-
     def vary_property_around_base_value(self, entity: ET.Element, property_name: str,
                                         cfg: Dict) -> ET.Element:
         """
@@ -764,39 +747,160 @@ class RandEnt(object):
 
         return entity
 
-    def scale_property(self, entity: ET.Element, property_name: str, cfg: Dict) -> ET.Element:
+    def find_all_nodes(self, entity: ET.Element, property_name: str,
+                       no_dive: bool = False, quiet:bool = False, diving:bool=False) -> Optional[ET.Element]:
+        nodes = entity.findall(f".//property[@name='{property_name}']")
+        if len(nodes) == 0:
+            if no_dive:
+                return None
+
+            extends = entity.attrib.get('extends', None)
+            if extends is None:
+                logger.debug(f" ... {property_name} base not found, need default")
+                return None
+            else:
+                deeper = self.ENTITY_INVENTORY[extends]
+                return self.find_all_nodes(deeper, property_name, quiet=quiet, diving=True)
+        else:
+            entity_name = entity.attrib['name']
+            if not quiet and diving:
+                logger.debug(f" ... {property_name} base found in {entity_name}")
+            return nodes[0]
+
+    def alter_property(self, entity: ET.Element, property_name: str, scale: float = None,
+                       variance: Tuple[float, float] = None,
+                       default: str = None, limits: Tuple[float, float] = None, is_float: bool = True) -> ET.Element:
         """
-        This looks for a property.  If found, then multiplies the value by pct_random_int
-        BUT if it cannot find a property, uses val_if_empty and inserts a new property. 
-        
+        This looks for a property, diving down to the source entity if needed.  It the scales by the indicated
+        factor, if specified, then applies any variance.
+
+        :rtype: ET.Element
         :param entity: source entity
-        :param property_name: property being scaled
-        :param cfg: variance data
+        :param property_name: property being altered
+        :param scale: If defined, initial multiplier
+        :param variance: if defined, Tuple of (modifier reduced, modifier increased); i.e. (0.1, 0.25) is -10% to +25%
+        :param default: If defined, value to use if no value is found in the entity chain
+        :param limits: If defined, cap min and maximums
+        :param is_float: If True, define value as float string, else int string
         :return: modified entity
         """
-        multiplier = cfg['pct_random_int']  # where "100" = 100%
-        default = cfg['default']
+        entity_name = entity.attrib['name']
+        source = self.find_all_nodes(entity, property_name, no_dive=True, quiet=True)
+        baseline = self.find_all_nodes(entity, property_name)
+        if baseline is None:
+            if default is None:
+                raise RuntimeError(f"Need default for {property_name} for {entity_name}!")
+            else:
+                value = float(default)
+        else:
+            value = baseline.attrib['value']
 
-        # prevent zombie sizes over 2.0, otherwise they cannot hit you
-        cap = 2.0 if self.giants and property_name == "SizeScale" else None
+        original = value
+        if value is None:
+            value = default
+        value = float(value)
 
-        original = None
-        for node in entity.findall(f".//property[@name='{property_name}']"):
-            original = node.attrib['value']
-            new_val = self.scale_given_number(original, multiplier, self.determine_num_decimals(original), cap=cap)
-            if new_val != original:
-                node.set('value', new_val)
-                logger.debug(f"   Changed {property_name} from {original} to {new_val}")
+        # scale
+        if scale is not None:
+            value = value * scale
 
-        # ok, we did NOT find the attribute
-        if original is None:
+        # vary
+        if variance is not None:
+            if variance[0] >= 1.0:
+                raise RuntimeError("Variance reduction cannot be more than or equal to 1.0")
+            v = variance[0] + variance[1]
+            b = 1.0 - variance[0]
+            value = value * (self.rand.random() * v + b)
+
+        if limits is not None:
+            value = min(max(value, float(limits[0])), float(limits[1]))
+
+        replace = f"{value:.2f}" if is_float else f"{int(value)}"
+        if source is not None:
+            source.set('value', replace)
+            logger.debug(f"   Changed {property_name} from {original} to {replace}")
+            if property_name == "SizeScale" and f"{replace}" == "0":
+                logger.warning("Size to 0!")
+        else:
             prop = ET.Element("property")
             prop.set('name', property_name)
-            new_val = self.scale_given_number(default, multiplier, self.determine_num_decimals(default), cap=cap)
-            prop.set('value', new_val)
+            prop.set('value', replace)
             prop.tail = "\n    "
             entity.insert(1, prop)
-            logger.debug(f" + Defined {property_name} as {new_val}")
+            logger.debug(f" + Defined {property_name} as {replace}")
+
+        return entity
+
+    def alter_property_duplex(self, entity: ET.Element, property_name: str, scale: float = None,
+                              variance: Tuple[float, float] = None,
+                              default: str = None, limits: Tuple[float, float] = None,
+                              is_float: bool = True) -> ET.Element:
+        """
+        This looks for a property, diving down to the source entity if needed.  It the scales by the indicated
+        factor, if specified, then applies any variance.  Since this is two values, we make sure they don't overlap.
+
+        :param entity: source entity
+        :param property_name: property being altered
+        :param scale: If defined, initial multiplier
+        :param variance: if defined, Tuple of (modifier reduced, modifier increased); i.e. (0.1, 0.25) is -10% to +25%
+        :param default: If defined, comma-separated value to use if no value is found in the entity chain
+        :param limits: If defined, cap min and maximums
+        :param is_float: If True, define value as float string, else int string
+        :return: modified entity
+        """
+        entity_name = entity.attrib['name']
+        source = self.find_all_nodes(entity, property_name, no_dive=True, quiet=True)
+        baseline = self.find_all_nodes(entity, property_name)
+        if baseline is None:
+            if default is None:
+                raise RuntimeError(f"Need default for {property_name} for {entity_name}!")
+            else:
+                value = default
+        else:
+            value = baseline.attrib['value']
+
+        original = value
+        if value is None:
+            value = default
+        parts = value.split(",")
+        value1 = float(parts[0])
+        value2 = float(parts[1])
+
+        # scale
+        if scale is not None:
+            value1 = value1 * scale
+            value2 = value2 * scale
+
+        # vary
+        if variance is not None:
+            if variance[0] >= 1.0:
+                raise RuntimeError("Variance reduction cannot be more than or equal to 1.0")
+            value1 = value1 * (self.rand.random() * (variance[0] + variance[1]) + (1.0 - variance[0]))
+            value2 = value2 * (self.rand.random() * (variance[0] + variance[1]) + (1.0 - variance[0]))
+
+        # limits
+        if limits is not None:
+            value1 = min(max(value1, float(limits[0])), float(limits[1]))
+            value2 = min(max(value2, float(limits[0])), float(limits[1]))
+
+        # prevent overlap
+        if value1 >= value2:
+            value1 = value2 * 0.95
+            value2 = value2 * 1.05
+
+        replace = f"{value1:.2f}, {value2:.2f}" if is_float else f"{int(value1)}, {int(value2)}"
+        if source is not None:
+            source.set('value', replace)
+            logger.debug(f"   Changed {property_name} from {original} to {replace}")
+            if property_name == "SizeScale" and f"{replace}" == "0":
+                logger.warning("Size to 0!")
+        else:
+            prop = ET.Element("property")
+            prop.set('name', property_name)
+            prop.set('value', replace)
+            prop.tail = "\n    "
+            entity.insert(1, prop)
+            logger.debug(f" + Defined {property_name} as {replace}")
 
         return entity
 
@@ -815,6 +919,11 @@ class RandEnt(object):
         :param is_enemy: True if hostile
         :return: modified entity
         """
+        # research mode, for checking materials
+        if self.research:
+            entity.attrib['trub_scale'] = "500"
+            return entity
+
         if self.no_scale:
             entity.attrib['trub_scale'] = "100"
             return entity
@@ -828,15 +937,15 @@ class RandEnt(object):
                 sizes.append("300")
         elif self.munchkins:  # animals varied normal sized, zombies smaller
             if is_animal:
-                sizes = ["50", "80", "90", "100", "110", "120"]
+                sizes = ["50", "75", "100", "125"]
             else:
-                sizes = ["45", "50", "55", "60", "65", "70"]
-        else:
-            sizes = ["85", "90", "95", "100", "105", "110", "115"]
+                sizes = ["25", "50", "75"]
+        else:  # normal variants
+            sizes = ["75", "100", "125"]
             if is_animal:
-                sizes += ["50", "75", "125", "150"]
+                sizes += ["50", "150"]
                 if not is_enemy:  # allow for larger timids
-                    sizes = sizes + ["200", "250"]
+                    sizes = sizes + ["175", "200", "225", "250"]
 
         rand_change_pct = random.choice(sizes)
         entity.attrib['trub_scale'] = rand_change_pct
@@ -863,7 +972,18 @@ class RandEnt(object):
         value = entity.attrib.get('trub_raging', "")
         return value != ""
 
-    def vary_size_and_mass(self, entity: ET.Element, cfg: Dict) -> ET.Element:
+    @staticmethod
+    def is_freak(entity: ET.Element) -> bool:
+        """
+        Check for raging information on a stag.
+
+        :param entity: supplied entity
+        :return: true if has freak texture for Material0
+        """
+        value = entity.attrib.get('trub_freak', "")
+        return value != ""
+
+    def vary_size_and_mass(self, entity: ET.Element) -> ET.Element:
         """
         Adjust the SizeScale and Mass of the entity.
 
@@ -894,26 +1014,20 @@ class RandEnt(object):
         "Weight" has nothing to do with physical weight, but with distribution.
 
         :param entity: source entity
-        :param cfg: variance data
         :return: modified entity
         """
-        mass_default: str = cfg['mass_default_int']
-        sizescale_default: str = cfg['sizescale_default_two_dec']
-
         # get previously determined overall scale
         trub_scale = self.get_trub_scale(entity)  # where "100" = 100%
 
-        entity = self.scale_property(entity, 'SizeScale', {'pct_random_int': trub_scale,
-                                                           'default': sizescale_default})
+        entity = self.alter_property(entity, 'SizeScale', scale=float(trub_scale) / 100.0, variance=(0.1, 0.1),
+                                     default="1.0", limits=(0.25, 2.0))
 
-        # Mass uses size-cubed rule for gross mass, +/-10% for variance
-        ratio = float(trub_scale) / 100.0
-        cubed = pow(ratio, 3) * (0.9 + self.rand.random() * 0.2)  # +/- 10%
-        cubed_str = str(max(int(cubed * 100), 2))  # mimimum of 2
+        # Mass uses size-cubed rule for gross mass
+        cubed = pow(float(trub_scale) / 100.0, 3)
 
         # Use SizeScale change ratio to affect mass
-        entity = self.scale_property(entity, 'Mass', {'pct_random_int': cubed_str,
-                                                      'default': mass_default})
+        entity = self.alter_property(entity, 'Mass', scale=cubed, variance=(0.1, 0.1), default=None,
+                                     limits=(2.0, 100000.0), is_float=False)
 
         return entity
 
@@ -978,23 +1092,26 @@ class RandEnt(object):
         if trub_scale == 100:
             return entity
 
-        ts_float = float(trub_scale) / 100.0
+        ts_float = math.pow(float(trub_scale) / 100.0, 0.66)
+        entity_mod = (self.rand.random() * 0.2 + 0.9) * ts_float
+        block_mod = (self.rand.random() * 0.2 + 0.9) * ts_float
+
         for node in entity.findall(f".//effect_group[@name='Base Effects']"):
-            if ts_float > 1.0:
-                new_val = ts_float - 1.0
-                mode = "perc_add"
-            elif ts_float < 1.0:
-                new_val = 1.0 - ts_float
-                mode = "perc_subtract"
-            else:
-                break
+            new_entity = int((entity_mod - 1.0) * 100.0)
+            new_block = int((block_mod - 1.0) * 100.0)
+            mode = "perc_add"
 
             item = ET.SubElement(node, 'passive_effect')
             item.set('name', "EntityDamage")
-            item.set('value', f"{new_val:.2f}")
+            item.set('value', f"{new_entity}")
             item.set('operation', mode)
             item.tail = "\n    "
-            logger.debug(f" + Added EntityDamage '{mode}' as {new_val}")
+            item = ET.SubElement(node, 'passive_effect')
+            item.set('name', "BlockDamage")
+            item.set('value', f"{new_block}")
+            item.set('operation', mode)
+            item.tail = "\n    "
+            logger.debug(f" + Added Damage '{mode}' as Entity {new_entity}/Block {new_block}")
             break
 
         return entity
@@ -1012,7 +1129,6 @@ class RandEnt(object):
         :return: modified entity
         """
         pct_rand_int: str = cfg['pct_random_int']
-        exp_gain_default_int: str = cfg['experience_gain_default_int']
 
         entity, ratio = self.modify_health_max_base(entity, pct_rand_int, scaling=meat_scaling)
         ratio = ratio * (exp_scaling / meat_scaling)
@@ -1021,12 +1137,11 @@ class RandEnt(object):
         if self.is_raging(entity):
             ratio = ratio * 1.25
 
-        scaled = str(max(int(ratio * 100), 1))
+        scaled = max(ratio, 0.05)  # min of 5%
         self.modify_entity_damage(entity)
 
-        entity = self.scale_property(entity, 'ExperienceGain', {'pct_random_int': scaled,
-                                                                'default': exp_gain_default_int})
-
+        entity = self.alter_property(entity, 'ExperienceGain', scale=scaled, variance=(0.1, 0.1), default=None,
+                                     limits=(1.0, 100000.0), is_float=False)
         return entity
 
     @staticmethod
@@ -1140,107 +1255,87 @@ class RandEnt(object):
 
         return entity
 
-    # ----- AI alteration code
-    # FUTURE: randomize numeric entries?
+    # ----- AI Variations ----------
+    # All entries: (name, value) or (name, value, data)
+    # - End AITask and AITarget chains with a "" value
+    # - For ApproachAndAttackTarget data, it's class,maxChaseTime (return home)
+    # - for SetNearestEntityAsTarget data, its class, hear distance, see dist (checked left to right,
+    #     0 dist uses entity default)
+
+    # <!--Classes for AITarget:
+    #     <property name="Class" value="EntityAnimalRabbit"/> and chicken
+    #     <property name="Class" value="EntityAnimalStag"/>
+    #     <property name="Class" value="EntityBackpack"/>
+    #     <property name="Class" value="EntityBandit"/>
+    #     <property name="Class" value="EntityEnemyAnimal"/>
+    #     <property name="Class" value="EntityLootContainer"/>
+    #     <property name="Class" value="EntityMinibike"/>
+    #     <property name="Class" value="EntityNPC"/>
+    #     <property name="Class" value="EntityPlayer"/>
+    #     <property name="Class" value="EntitySupplyCrate"/>
+    #     <property name="Class" value="EntitySupplyPlane"/>
+    #     <property name="Class" value="EntitySurvivor"/>
+    #     <property name="Class" value="EntityVulture"/>
+    #     <property name="Class" value="EntityZombie"/>
+    #     <property name="Class" value="EntityZombieCop"/>
+    #     <property name="Class" value="EntityZombieDog"/>
+    # -->
+    # <!--Stealth gameplay:
+    #     SetAsTargetIfHurt/SetNearestEntityAsTarget start a 60 second timer of alertness
+    #     For zombies that time is up to 6 seconds.
+    # -->
+
+    # NOTE: No "Look" AI (always doing something) or RunawayWhenHurt AI (no cowards)
+
+    AI_ZOMBIE = [
+        ("AIFeralSense", "1.5"),
+        ("AINoiseSeekDist", "8"),
+        ("AIPathCostScale", ".15, .4"),
+
+        ("AITask-1", "BreakBlock"),
+        ("AITask-2", "DestroyArea"),
+        ("AITask-3", "Territorial"),
+        ("AITask-4", "ApproachAndAttackTarget", "class=EntityPlayer,0,EntityNPC,0,EntityEnemyAnimal,0"),
+        ("AITask-5", "ApproachSpot"),
+        ("AITask-6", "Wander"),
+        ("AITask-7", ""),
+
+        ("AITarget-1", "SetAsTargetIfHurt", "class=EntityPlayer,EntityNPC,EntityEnemyAnimal"),
+        ("AITarget-2", "BlockingTargetTask"),
+        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,0,0,EntityNPC,0,0"),
+        ("AITarget-4", "")
+    ]
+
     AI_BEAR = [
+        ("AIFeralSense", "1.5"),
+        ("AINoiseSeekDist", "8"),
+        ("AIPathCostScale", ".4, .6"),
+
         ("AITask-1", "BreakBlock"),
         ("AITask-2", "DestroyArea"),
         ("AITask-3", "Territorial"),
         ("AITask-4", "ApproachAndAttackTarget", "class=EntityAnimalStag,40,EntityPlayer,25,EntityZombie,30"),
         ("AITask-5", "ApproachSpot"),
-        ("AITask-6", "Look"),
-        ("AITask-7", "Wander"),
-        ("AITask-8", ""),  # end task
+        ("AITask-6", "Wander"),
+        ("AITask-7", ""),
+
         ("AITarget-1", "SetAsTargetIfHurt"),
         ("AITarget-2", "BlockingTargetTask"),
         ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,13,8,EntityAnimalStag,0,0,EntityZombie,0,0"),
         ("AITarget-4", "")
     ]
 
-    AI_WOLF = [
-        ("AITask-1", "BreakBlock"),
-        ("AITask-2", "Territorial"),
-        ("AITask-3", "RunawayWhenHurt", "runChance=0.5;healthPer=0.3;healthPerMax=0.6"),
-        ("AITask-4", "ApproachAndAttackTarget", "class=EntityAnimalStag,20,EntityPlayer,15,EntityZombie,20"),
-        ("AITask-5", "ApproachSpot"),
-        ("AITask-6", "Look"),
-        ("AITask-7", "Wander"),
-        ("AITask-8", ""),
-        ("AITarget-1", "SetAsTargetIfHurt"),
-        ("AITarget-2", "BlockingTargetTask"),
-        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,14,8,EntityAnimalStag,0,0,EntityZombie,0,0"),
-        ("AITarget-4", "")
-    ]
+    AI_HOSTILE = [
+        ("AIFeralSense", "1.5"),
+        ("AINoiseSeekDist", "3"),
+        ("AIPathCostScale", ".4, .6"),
 
-    AI_COYOTE = [
         ("AITask-1", "BreakBlock"),
-        ("AITask-2", "Territorial"),
-        ("AITask-3", "RunawayWhenHurt", "runChance=.9;healthPer=.6;healthPerMax=0.75"),
-        ("AITask-4", "ApproachAndAttackTarget", "class=EntityAnimalRabbit,8,EntityPlayer,10"),
-        ("AITask-5", "ApproachSpot"),
-        ("AITask-6", "Look"),
-        ("AITask-7", "Wander"),
-        ("AITask-8", ""),
-        ("AITarget-1", "SetAsTargetIfHurt"),
-        ("AITarget-2", "BlockingTargetTask"),
-        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,15,10,EntityAnimalRabbit,0,18"),
-        ("AITarget-4", "")
-    ]
+        ("AITask-2", "ApproachAndAttackTarget", "class=EntityNPC,20,EntityPlayer,20"),
+        ("AITask-3", "ApproachSpot"),
+        ("AITask-4", "Wander"),
+        ("AITask-5", ""),
 
-    AI_DIREWOLF = [
-        ("AITask-1", "BreakBlock"),
-        ("AITask-2", "Territorial"),
-        ("AITask-3", "ApproachAndAttackTarget", "class=EntityAnimalStag,30,EntityPlayer,30"),
-        ("AITask-4", "ApproachSpot"),
-        ("AITask-5", "Look"),
-        ("AITask-6", "Wander"),
-        ("AITask-7", ""),
-        ("AITarget-1", "SetAsTargetIfHurt"),
-        ("AITarget-2", "BlockingTargetTask"),
-        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,29,24,EntityAnimalStag,0,0"),
-        ("AITarget-4", "")
-    ]
-
-    AI_MOUNTAINLION = [
-        ("AITask-1", "Leap", "legs=4"),
-        ("AITask-2", "BreakBlock"),
-        ("AITask-3", "Territorial"),
-        ("AITask-4", "RunawayWhenHurt", "runChance=.4;healthPer=.1;healthPerMax=.4"),
-        ("AITask-5", "ApproachAndAttackTarget", "class=EntityAnimalStag,30,EntityPlayer,15,EntityZombie,20"),
-        ("AITask-6", "ApproachSpot"),
-        ("AITask-7", "Look"),
-        ("AITask-8", "Wander"),
-        ("AITask-9", ""),
-        ("AITarget-1", "SetAsTargetIfHurt"),
-        ("AITarget-2", "BlockingTargetTask"),
-        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,14,9,EntityAnimalStag,0,0,EntityZombie,0,5"),
-        ("AITarget-4", "")
-    ]
-
-    AI_SNAKE = [
-        ("AITask-1", "BreakBlock"),
-        ("AITask-2", "Territorial"),
-        ("AITask-3", "ApproachAndAttackTarget", "class=EntityPlayer,15,EntityNPC,15"),
-        ("AITask-4", "ApproachSpot"),
-        ("AITask-5", "Look"),
-        ("AITask-6", "Wander"),
-        ("AITask-7", ""),
-        ("AITarget-1", "SetAsTargetIfHurt", "class=EntityNPC,EntityPlayer"),
-        ("AITarget-2", "BlockingTargetTask"),
-        ("AITarget-3", "SetNearestCorpseAsTarget", "class=EntityPlayer"),
-        ("AITarget-4", "SetNearestEntityAsTarget", "class=EntityPlayer,12,0,EntityNPC,0,0"),
-        ("AITarget-5", "")
-    ]
-
-    # The Boar AI is kind of boring; they usually just stand there like dummies -- tweaking it to add Territorial
-    AI_BOAR = [
-        ("AITask-1", "BreakBlock"),
-        ("AITask-2", "Territorial"),
-        ("AITask-3", "ApproachAndAttackTarget", "class=EntityNPC,20,EntityPlayer,20"),
-        ("AITask-4", "ApproachSpot"),
-        ("AITask-5", "Look"),
-        ("AITask-6", "Wander"),
-        ("AITask-7", ""),
         ("AITarget-1", "SetAsTargetIfHurt"),
         ("AITarget-2", "BlockIf", "condition=alert e 0"),
         ("AITarget-3", "BlockingTargetTask"),
@@ -1248,121 +1343,198 @@ class RandEnt(object):
         ("AITarget-5", "")
     ]
 
+    AI_ZOMBIEBEAR = [
+        ("AIFeralSense", "1.2"),
+        ("AINoiseSeekDist", "8"),
+        ("AIPathCostScale", ".4, .6"),
+
+        ("AITask-1", "BreakBlock"),
+        ("AITask-2", "DestroyArea"),
+        ("AITask-3", "Territorial"),
+        ("AITask-4", "ApproachAndAttackTarget", "class=EntityAnimalStag,40,EntityPlayer,0,EntityNPC,0"),
+        ("AITask-5", "ApproachSpot"),
+        ("AITask-6", "Wander"),
+        ("AITask-7", ""),
+
+        ("AITarget-1", "SetAsTargetIfHurt"),
+        ("AITarget-2", "BlockingTargetTask"),
+        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,18,13,EntityAnimalStag,0,0"),
+        ("AITarget-4", "")
+    ]
+
+    AI_WOLF = [
+        ("AIFeralSense", "1.5"),
+        ("AINoiseSeekDist", "8"),
+        ("AIPathCostScale", ".4, .6"),
+
+        ("AITask-1", "BreakBlock"),
+        ("AITask-2", "Territorial"),
+        ("AITask-3", "ApproachAndAttackTarget", "class=EntityAnimalStag,20,EntityPlayer,15,EntityZombie,20"),
+        ("AITask-4", "ApproachSpot"),
+        ("AITask-5", "Wander"),
+        ("AITask-6", ""),
+        ("AITarget-1", "SetAsTargetIfHurt"),
+        ("AITarget-2", "BlockingTargetTask"),
+        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,14,8,EntityAnimalStag,0,0,EntityZombie,0,0"),
+        ("AITarget-4", "")
+    ]
+
+    AI_DIREWOLF = [
+        ("AIFeralSense", "1.5"),
+        ("AINoiseSeekDist", "8"),
+        ("AIPathCostScale", ".4, .6"),
+
+        ("AITask-1", "BreakBlock"),
+        ("AITask-2", "Territorial"),
+        ("AITask-3", "ApproachAndAttackTarget", "class=EntityAnimalStag,30,EntityPlayer,30"),
+        ("AITask-4", "ApproachSpot"),
+        ("AITask-5", "Wander"),
+        ("AITask-6", ""),
+
+        ("AITarget-1", "SetAsTargetIfHurt"),
+        ("AITarget-2", "BlockingTargetTask"),
+        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,29,24,EntityAnimalStag,0,0"),
+        ("AITarget-4", "")
+    ]
+
+    AI_COYOTE = [
+        ("AIFeralSense", "1.5"),
+        ("AINoiseSeekDist", "8"),
+        ("AIPathCostScale", ".4, .6"),
+
+        ("AITask-1", "BreakBlock"),
+        ("AITask-2", "Territorial"),
+        ("AITask-3", "ApproachAndAttackTarget", "class=EntityAnimalRabbit,8,EntityPlayer,10"),
+        ("AITask-4", "ApproachSpot"),
+        ("AITask-5", "Wander"),
+        ("AITask-6", ""),
+
+        ("AITarget-1", "SetAsTargetIfHurt"),
+        ("AITarget-2", "BlockingTargetTask"),
+        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,15,10,EntityAnimalRabbit,0,18"),
+        ("AITarget-4", "")
+    ]
+
+    AI_MOUNTAINLION = [
+        ("AIFeralSense", "1.5"),
+        ("AINoiseSeekDist", "8"),
+        ("AIPathCostScale", ".4, .6"),
+
+        ("AITask-1", "Leap", "legs=4"),
+        ("AITask-2", "BreakBlock"),
+        ("AITask-3", "Territorial"),
+        ("AITask-4", "ApproachAndAttackTarget", "class=EntityAnimalStag,30,EntityPlayer,15,EntityZombie,20"),
+        ("AITask-5", "ApproachSpot"),
+        ("AITask-6", "Wander"),
+        ("AITask-7", ""),
+
+        ("AITarget-1", "SetAsTargetIfHurt"),
+        ("AITarget-2", "BlockingTargetTask"),
+        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,14,9,EntityAnimalStag,0,0,EntityZombie,0,5"),
+        ("AITarget-4", "")
+    ]
+
+    AI_SNAKE = [
+        ("AIFeralSense", "1.5"),
+        ("AINoiseSeekDist", "8"),
+        ("AIPathCostScale", ".4, .6"),
+
+        ("AITask-1", "BreakBlock"),
+        ("AITask-2", "Territorial"),
+        ("AITask-3", "ApproachAndAttackTarget", "class=EntityPlayer,15,EntityNPC,15"),
+        ("AITask-4", "ApproachSpot"),
+        ("AITask-5", "Wander"),
+        ("AITask-6", ""),
+
+        ("AITarget-1", "SetAsTargetIfHurt", "class=EntityNPC,EntityPlayer"),
+        ("AITarget-2", "BlockingTargetTask"),
+        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,12,0,EntityNPC,0,0"),
+        ("AITarget-4", "")
+    ]
+
     AI_GRACE = [
+        ("AIFeralSense", "1.5"),
+        ("AINoiseSeekDist", "8"),
+        ("AIPathCostScale", ".4, .6"),
+
         ("AITask-1", "BreakBlock"),
         ("AITask-2", "DestroyArea"),
         ("AITask-3", "Territorial"),
         ("AITask-4", "ApproachAndAttackTarget", "class=EntityPlayer,30,EntityZombie,10"),
         ("AITask-5", "ApproachSpot"),
-        ("AITask-6", "Look"),
-        ("AITask-7", "Wander"),
-        ("AITask-8", ""),
+        ("AITask-6", "Wander"),
+        ("AITask-7", ""),
+
         ("AITarget-1", "SetAsTargetIfHurt"),
         ("AITarget-2", "BlockingTargetTask"),
-        ("AITarget-3", "SetNearestCorpseAsTarget", "class=EntityPlayer"),
         ("AITarget-4", "SetNearestEntityAsTarget", "class=EntityPlayer,0,0,EntityZombie,0,3"),
         ("AITarget-5", "")
     ]
 
     AI_DOG = [
+        ("AIFeralSense", "1.6"),
+        ("AINoiseSeekDist", "8"),
+        ("AIPathCostScale", ".4, .6"),
+
         ("AITask-1", "BreakBlock"),
         ("AITask-2", "Territorial"),
         ("AITask-3", "ApproachAndAttackTarget", "class=EntityPlayer,20,EntityNPC,20"),
         ("AITask-4", "ApproachSpot"),
-        ("AITask-5", "Look"),
-        ("AITask-6", "Wander"),
-        ("AITask-7", ""),
+        ("AITask-5", "Wander"),
+        ("AITask-6", ""),
+
         ("AITarget-1", "SetAsTargetIfHurt", "class=EntityNPC,EntityPlayer"),
         ("AITarget-2", "BlockingTargetTask"),
-        ("AITarget-3", "SetNearestCorpseAsTarget", "class=EntityPlayer"),
-        ("AITarget-4", "SetNearestEntityAsTarget", "class=EntityPlayer,20,0,EntityNPC,0,0"),
-        ("AITarget-5", "")
-    ]
-
-    AI_ZOMBIE = [
-        ("AINoiseSeekDist", "8"),
-        ("AIPathCostScale", ".15, .4"),
-        ("AITask-1", "BreakBlock"),
-        ("AITask-2", "DestroyArea"),
-        ("AITask-3", "Territorial"),
-        # class,maxChaseTime (return home)
-        ("AITask-4", "ApproachAndAttackTarget", "class=EntityNPC,0,EntityEnemyAnimal,0,EntityPlayer,0"),
-        ("AITask-5", "ApproachSpot"),
-        ("AITask-6", "Look"),
-        ("AITask-7", "Wander"),
-        ("AITask-8", ""),
-        ("AITarget-1", "SetAsTargetIfHurt", "class=EntityNPC,EntityEnemyAnimal,EntityPlayer"),
-        ("AITarget-2", "BlockingTargetTask"),
-        ("AITarget-3", "SetNearestCorpseAsTarget", "class=EntityPlayer"),
-        # class, hear distance, see dist (checked left to right, 0 dist uses entity default)
-        ("AITarget-4", "SetNearestEntityAsTarget", "class=EntityPlayer,0,0,EntityNPC,0,0"),
+        ("AITarget-4", "SetNearestEntityAsTarget", "class=EntityPlayer,22,20,EntityNPC,0,0"),
         ("AITarget-5", "")
     ]
 
     AI_SPIDER = [
+        ("AIFeralSense", "1.5"),
         ("AINoiseSeekDist", "3"),
         ("AIPathCostScale", ".6, 1"),
+
         ("AITask-1", "Leap"),
         ("AITask-2", "BreakBlock"),
         ("AITask-3", "DestroyArea"),
         ("AITask-4", "Territorial"),
-        ("AITask-5", "ApproachDistraction"),
-        ("AITask-6", "ApproachAndAttackTarget", "class=EntityNPC,0,EntityEnemyAnimal,0,EntityPlayer,0"),
-        ("AITask-7", "ApproachSpot"),
-        ("AITask-8", "Look"),
-        ("AITask-9", "Wander"),
-        ("AITask-10", ""),
+        ("AITask-5", "ApproachAndAttackTarget", "class=EntityNPC,0,EntityEnemyAnimal,0,EntityPlayer,0"),
+        ("AITask-6", "ApproachSpot"),
+        ("AITask-7", "Wander"),
+        ("AITask-8", ""),
+
         ("AITarget-1", "SetAsTargetIfHurt", "class=EntityNPC,EntityEnemyAnimal,EntityPlayer"),
         ("AITarget-2", "BlockingTargetTask"),
-        ("AITarget-3", "SetNearestCorpseAsTarget", "class=EntityPlayer"),
-        # class, hear distance, see dist (checked left to right, 0 dist uses entity default)
-        ("AITarget-4", "SetNearestEntityAsTarget", "class=EntityPlayer,0,0,EntityNPC,0,0"),
-        ("AITarget-5", "")
+        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,0,0,EntityNPC,0,0"),
+        ("AITarget-4", "")
     ]
 
     AI_COP = [
+        ("AIFeralSense", "1.5"),
         ("AINoiseSeekDist", "8"),
         ("AIPathCostScale", ".15, .4"),
-        ("AITask-1", "BreakBlock"),
-        ("AITask-2", "ApproachAndAttackTarget", "class=EntityNPC,0,EntityPlayer"),
-        ("AITask-3", "ApproachSpot"),
-        ("AITask-4", "Look"),
-        ("AITask-5", "Wander"),
-        ("AITask-6", ""),
-        ("AITarget-1", "SetAsTargetIfHurt", "class=EntityNPC,EntityEnemyAnimal,EntityPlayer"),
-        ("AITarget-2", "BlockingTargetTask"),
-        ("AITarget-3", "SetNearestCorpseAsTarget", "class=EntityPlayer"),
-        # class, hear distance, see dist (checked left to right, 0 dist uses entity default)
-        ("AITarget-4", "SetNearestEntityAsTarget", "class=EntityPlayer,0,0,EntityNPC,0,0"),
-        ("AITarget-5", "")
-    ]
 
-    AI_DEMO = [
-        ("AINoiseSeekDist", "8"),
-        ("AIPathCostScale", ".15, .4"),
         ("AITask-1", "BreakBlock"),
-        ("AITask-2", "DestroyArea"),
-        ("AITask-3", "ApproachAndAttackTarget", "class=EntityNPC,0,EntityEnemyAnimal,0,EntityPlayer,0"),
-        ("AITask-4", "ApproachSpot"),
-        ("AITask-5", "Look"),
-        ("AITask-6", "Wander"),
-        ("AITask-7", ""),
+        ("AITask-2", "ApproachAndAttackTarget", "class=EntityEnemyAnimal,0,EntityPlayer,0"),
+        ("AITask-3", "ApproachSpot"),
+        ("AITask-4", "Wander"),
+        ("AITask-5", ""),
+
         ("AITarget-1", "SetAsTargetIfHurt", "class=EntityNPC,EntityEnemyAnimal,EntityPlayer"),
         ("AITarget-2", "BlockingTargetTask"),
-        ("AITarget-3", "SetNearestCorpseAsTarget", "class=EntityPlayer"),
-        # class, hear distance, see dist (checked left to right, 0 dist uses entity default)
-        ("AITarget-4", "SetNearestEntityAsTarget", "class=EntityPlayer,0,0,EntityNPC,0,0"),
-        ("AITarget-5", "")
+        ("AITarget-3", "SetNearestEntityAsTarget", "class=EntityPlayer,0,0,EntityNPC,0,0"),
+        ("AITarget-4", "")
     ]
 
     AI_LIST1 = [
         ("animalBear", AI_BEAR),
+        ("animalZombieBear", AI_ZOMBIEBEAR),
         ("animalWolf", AI_WOLF),
         ("animalCoyote", AI_COYOTE),
         ("animalMountainLion", AI_MOUNTAINLION),
         ("animalSnake", AI_SNAKE),
-        ("animalBoar", AI_BOAR),
         ("animalZombieDog", AI_DOG),
+        ("animalTemplateHostile", AI_HOSTILE)
     ]
     AI_LIST2 = [
         ("animalDireWolf", AI_DIREWOLF),
@@ -1370,20 +1542,22 @@ class RandEnt(object):
         ("zombieTemplateMale", AI_ZOMBIE),
         ("zombieSpider", AI_SPIDER),
         ("zombieFatCop", AI_COP),
-        ("zombieDemolition", AI_DEMO),
     ]
     AI_LIST = AI_LIST1 + AI_LIST2
 
-    # Zombie animals always act like zombies, most timid are unaffected
+    # Zombie vultures require special AI, most timid are unaffected
     EXCEPT_FOR = {
-        "animalZombieBear": True,
         "animalZombieVulture": True,
         "animalZombieVultureRadiated": True,
-        "animalZombieDog": True,
         "animalRabbit": True,
         "animalChicken": True,
         "animalDoe": True,
     }
+
+    def _add_details_count(self, key: str) -> None:
+        if key not in self.details:
+            self.details[key] = 0
+        self.details[key] += 1
 
     def alter_hostile_animal_ai(self, entity: ET.Element) -> ET.Element:
         """
@@ -1396,18 +1570,24 @@ class RandEnt(object):
         if self.rand.random() > self.altered_ai_percent or original in self.EXCEPT_FOR:
             return entity  # no change
 
-        # remove any AITask or AITarget entries
+        # remove any AITask or AITarget entries (or sense/seek entries)
         for node in entity.findall(f".//property"):
-            if node.get('name').startswith("AITask-") or node.get('name').startswith("AITarget-"):
-                logger.info(f"Saw {node.get('name')} = {node.get('value')}")
+            nn = node.get('name')
+            if nn.startswith("AITask-") or nn.startswith("AITarget-") or nn in ["AIFeralSense", "AINoiseSeekDist",
+                                                                                "AIPathCostScale"]:
                 entity.remove(node)
 
         # choose a new AI, other than existing
         use = None
+        pick = []
         while use is None:
             pick = self.rand.choice(self.AI_LIST)
             if pick[0] != original:
                 use = pick
+        logger.debug(f"AI: changed to {pick[0]}")
+
+        key = f"{original} ({pick[0]} AI)"
+        self._add_details_count(key)
 
         # add in new AI in proper order
         # ("name", "value") or ("name", "value", "data") for each entry
@@ -1424,13 +1604,16 @@ class RandEnt(object):
 
         return entity
 
-
-    MELEE = [
+    MELEE1 = [
         "meleeHandAnimalWolf",
-        "meleeHandAnimalDireWolf",
         "meleeHandAnimalBear",
+        "meleeHandAnimalZombieDog",
+    ]
+    MELEE2 = [
+        "meleeHandAnimalDireWolf",
         "meleeHandAnimalZombieBear",
-        "meleeHandBossGrace"
+        "meleeHandBossGrace",
+        "meleeHandAnimalZombieVulture",
     ]
 
     def raging_stag_ai(self, entity: ET.Element) -> ET.Element:
@@ -1441,20 +1624,29 @@ class RandEnt(object):
         :return: modified entity
         """
         original = entity.attrib.get('original_name', "???")
-        if self.rand.random() > self.raging_stag_percent or original != "animalStag":
+        if self.rand.random() > self.raging_stag_percent or original in self.EXCEPT_FOR:
             return entity  # no change
 
         # remove any AITask or AITarget entries
         for node in entity.findall(f".//property"):
-            if node.get('name').startswith("AITask-") or node.get('name').startswith("AITarget-"):
-                logger.info(f"Saw {node.get('name')} = {node.get('value')}")
+            nn = node.get('name')
+            if nn.startswith("AITask-") or nn.startswith("AITarget-") or nn in ["AIFeralSense", "AINoiseSeekDist",
+                                                                                "AIPathCostScale"]:
                 entity.remove(node)
 
         # choose a new AI
-        use = self.rand.choice(self.AI_LIST2)  # animal AI only
+        use = self.rand.choice(self.AI_LIST)
+        logger.debug(f"AI: changed to {use[0]}")
+        key = f"{original} ({use[0]} AI)"
+        self._add_details_count(key)
 
         # add HandItem so it has something to work with
-        use[1].append(("HandItem", self.rand.choice(self.MELEE)))
+        bite = self.rand.choice(self.MELEE1 + self.MELEE2)
+        use[1].append(("HandItem", bite))
+
+        logger.debug(f"Bite: changed to {bite}")
+        key = f"Raging {original} Bite {bite}"
+        self._add_details_count(key)
 
         # add in new AI in proper order
         # ("name", "value") or ("name", "value", "data") for each entry
@@ -1471,9 +1663,15 @@ class RandEnt(object):
         entity.attrib['trub_raging'] = "yes"
         self.set_property(entity, "IsEnemyEntity", "true")
         self.set_property(entity, "AIGroupCircle", "1")
-        self.set_property(entity, "AINoiseSeekDist", "6")
-        self.set_property(entity, "AIPathCostScale", ".2, .4")
-        self.set_property(entity, "Class", "EntityEnemyAnimal")
+
+        # get aggro
+        use_entity = self.ENTITY_INVENTORY[use[0]]
+        orig_speed = self.find_all_nodes(use_entity, "MoveSpeed").attrib['value']
+        my_speed = self.find_all_nodes(entity, "MoveSpeed").attrib['value']
+        scale = float(my_speed) / float(orig_speed)
+        aggro = self.find_all_nodes(use_entity, "MoveSpeedAggro").attrib['value']
+        self.alter_property_duplex(entity, "MoveSpeedAggro", scale=scale, variance=(0.1, 0.25), default=aggro)
+
         self.raging_stag_count += 1
         return entity
 
@@ -1481,164 +1679,219 @@ class RandEnt(object):
     # ----- Entity Texture changing ----- #
     #######################################
 
-    # NOTE: Don't use the following (makes things invisible):
-    #   "particleeffects/materials/waterfallslope"
+    # NOTE: Don't use the following for body (makes things invisible):
     #   "particleeffects/models/materials/p_fiber"
     #   "materials/occludeeshadowcaster"
     #   "materials/SoftGlow"
 
-    # A19 materials, something causes problems when used, commented out and left for reference
-    # # transparent, picks up eye glow
-    # choices0a = [
-    #     "entities/buildings/materials/glass_industrial_lod",
-    #     "particleeffects/models/materials/p_glass",
-    # ]
-    # # solid
-    # choices0b = [
-    #     "entities/buildings/materials/chimney",
-    #     "entities/resources/materials/orecoalboulder",
-    #     "entities/resources/materials/oreshaleboulder",
-    #     "entities/resources/materials/oreleadboulder",
-    #     "particleeffects/models/car_explode",
-    #     "particleeffects/models/materials/p_dirt",
-    #     "particleeffects/models/materials/p_gib",
-    #     "particleeffects/models/materials/p_wood",  # mummy
-    #     "shapes/materials/wrought_iron_metal",
+    # solid = [
     #     "entities/animals/vulture/materials/vulture_v2",
-    #     "entities/animals/boar/materials/grace",
-    #     "entities/doors/materials/steel_door_2",
+    #     "entities/electrical/materials/flamethrowertrap",
     #     "particleeffects/blood",
-    #     "particleeffects/models/car_explode",
+    #     "#Other/Items?Misc/snowballPrefab/materials/snowball",
+    #     "entities/electrical/materials/electric_fence_post",
     #     "particleeffects/materials/blood_mist_tile_02",
-    #     "itemmodeffects/materials/baton_arc",
-    #     "Entities/Animals/Wolf/Materials/zombie_wolf"
-    # ]
-    # # ephemeral
-    # choices0c = [
-    #     "itemmodeffects/materials/baton_arc_fp",
-    #     "itemmodeffects/materials/melee_fire",
-    #     "materials/imageeffect_turretview",
-    #     "materials/waterinbucket",
     # ]
 
-    # transparent, picks up eye glow
-    transparent = [
-        "particleeffects/models/materials/p_glass",
-        "entities/buildings/materials/window_glass02_lod",
-    ]
-    # solid
-    solid = [
-        "entities/animals/vulture/materials/vulture_v2",
+    M_SOLID = [
         "entities/animals/boar/materials/grace",
-        "entities/resources/materials/orecoalboulder",
-        "entities/resources/materials/oreshaleboulder",
-        "entities/resources/materials/oreleadboulder",
-        "entities/gore/materials/torso_gore",
-        "particleeffects/models/materials/p_gib",
-        "particleeffects/models/car_explode",
-        "entities/electrical/materials/flamethrowertrap",
-        "shapes/materials/wrought_iron_metal",
-        "particleeffects/models/materials/p_dirt",
-        "particleeffects/models/materials/p_wood",
-        "entities/electrical/materials/spotlight",
-        "particleeffects/blood",
-        "entities/electrical/materials/solarpanel",
-        "#Other/Items?Misc/snowballPrefab/materials/snowball",
         "entities/buildings/materials/chimney",
         "entities/electrical/materials/electric_fence_post",
-        "particleeffects/materials/blood_mist_tile_02",
-        "entities/commercial/materials/metalpaintedwhite",
+        "entities/electrical/materials/flamethrowertrap",
+        "entities/electrical/materials/solarpanel",
+        "entities/electrical/materials/spotlight",
         "entities/furniture/materials/candelabra",
-        "particleeffects/materials/heart",
-        "Materials/UMAFur_ZombieBear",
+        "entities/gore/materials/torso_gore",
+        "entities/resources/materials/orecoalboulder",
+        "entities/resources/materials/oreleadboulder",
+        "entities/resources/materials/oreshaleboulder",
+        "particleeffects/models/car_explode",
+        "particleeffects/models/materials/p_dirt",
+        "particleeffects/models/materials/p_gib",
+        "particleeffects/models/materials/p_wood",
+        "shapes/materials/cabinet_old_top_ft",
+        "shapes/materials/wrought_iron_metal",
     ]
-    # ephemeral
-    ephemeral = [
+
+    M_TRANS = [
+        "entities/buildings/materials/window_glass02_lod",
+        "entities/buildings/materials/window_store_glass",
         "materials/waterinbucket",
-        "itemmodeffects/materials/melee_fire",
-        "itemmodeffects/materials/baton_arc",
+        "particleeffects/models/materials/p_glass",
+        "particleeffects/materials/waterfallslope",
     ]
-    glowing = [
+
+    M_GLOW = [
         "#Entities/Zombies?Zombies/Materials/feral_eye.mat",
         "#Entities/Zombies?Zombies/Materials/feral_radiated.mat",
         "#Entities/Zombies?Zombies/Materials/rad_eye.mat",
+        "itemmodeffects/materials/baton_arc_fp",
         "itemmodeffects/materials/melee_fire",
         "materials/wirematerial",
         "particleeffects/materials/p_spark_electricity",
-        "itemmodeffects/materials/baton_arc_fp",
         "particleeffects/models/materials/electrical_arc",
     ]
 
-    choices0 = transparent + solid + ephemeral
+    # Keyed by entity:
+    #   (mat0, mat1, mat2): Group if allowed, None otherwise
+    MAT_ALLOWED = {
 
-    # usually eye effects, hair for others
-    choices1 = solid + glowing
+        "animalBear": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalBoar": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalBossGrace": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalChicken": (M_SOLID, None, None),
+        "animalCoyote": (M_SOLID, M_GLOW + M_SOLID, None),  # body, spots
+        "animalDireWolf": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalDoe": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalMountainLion": (M_SOLID, None, None),
+        "animalRabbit": (M_SOLID, None, None),
+        "animalSnake": (M_SOLID, None, None),
+        "animalStag": (M_SOLID, None, None),
+        "animalZombieBear": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalWolf": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalZombieDog": (M_SOLID, M_GLOW, None),  # body, eyes
+        "animalZombieVulture": (M_SOLID, None, None),  # body
+        "animalZombieVultureRadiated": (M_SOLID, None, None),  # body
 
-    # usually hair effects
-    choices2 = solid + ephemeral
+        "zombieArlene": (M_SOLID, None, None),  # body
+        "zombieArleneFeral": (M_GLOW, None, None),  # eyes
+        "zombieArleneRadiated": (M_SOLID, None, None),  # body
+        "zombieBiker": (M_SOLID + M_GLOW, None, None),  # beard
+        "zombieBikerFeral": (M_SOLID + M_GLOW, None, None),  # beard
+        "zombieBikerRadiated": (M_SOLID + M_GLOW, None, None),  # beard
+        "zombieBoe": (M_SOLID, None, None),  # body
+        "zombieBoeFeral": (M_SOLID, None, None),  # body
+        "zombieBoeRadiated": (M_SOLID, None, None),  # body
+        "zombieBurnt": (M_SOLID, None, None),
+        "zombieBurntFeral": (M_SOLID, None, None),
+        "zombieBurntRadiated": (M_SOLID, None, None),
+        "zombieBusinessMan": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieBusinessManFeral": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieBusinessManRadiated": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieDarlene": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieDarleneFeral": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieDarleneRadiated": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieDemolition": (M_SOLID, M_GLOW, None),
+        "zombieFatCop": (M_SOLID, None, None),  # body
+        "zombieFatCopFeral": (M_SOLID, None, M_GLOW),  # body, ---, eyes
+        "zombieFatCopRadiated": (M_SOLID, None, None),  # body
+        "zombieFatHawaiian": (M_SOLID, None, None),  # body
+        "zombieFatHawaiianFeral": (M_SOLID, None, None),  # body
+        "zombieFatHawaiianRadiated": (M_SOLID, None, None),  # body
+        "zombieFemaleFat": (M_SOLID + M_GLOW, None, None),
+        "zombieFemaleFatFeral": (M_SOLID + M_GLOW, None, None),
+        "zombieFemaleFatRadiated": (M_SOLID + M_GLOW, None, None),
+        "zombieJanitor": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieJanitorFeral": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieJanitorRadiated": (M_SOLID + M_GLOW, None, None),  # hair
+        "zombieJoe": (M_SOLID + M_GLOW, None, None),
+        "zombieJoeFeral": (M_SOLID + M_GLOW, None, None),
+        "zombieJoeRadiated": (M_SOLID + M_GLOW, None, None),
+        "zombieLab": (M_SOLID, M_GLOW, M_SOLID + M_TRANS),
+        "zombieLabFeral": (M_SOLID, M_GLOW, M_SOLID + M_TRANS),
+        "zombieLabRadiated": (M_SOLID, M_GLOW, M_SOLID + M_TRANS),
+        "zombieLumberjack": (M_SOLID + M_GLOW, None, None),  # beard
+        "zombieLumberjackFeral": (M_GLOW, None, None),  # eyes
+        "zombieLumberjackRadiated": (M_SOLID + M_GLOW, None, None),
+        "zombieMarlene": (M_SOLID, None, None),
+        "zombieMarleneFeral": (M_SOLID, None, None),
+        "zombieMarleneRadiated": (M_SOLID, None, None),
+        "zombieMaleHazmat": (M_SOLID, None, None),  # body
+        "zombieMaleHazmatFeral": (M_GLOW, None, None),  # eyes
+        "zombieMaleHazmatRadiated": (M_SOLID, None, None),  # body
+        "zombieMoe": (M_SOLID, M_GLOW + M_SOLID, None),  # body, hair
+        "zombieMoeFeral": (M_SOLID, M_GLOW + M_SOLID, None),  # body, hair
+        "zombieMoeRadiated": (M_SOLID, M_GLOW + M_SOLID, None),  # body, hair
+        "zombieMutated": (M_SOLID, None, None),
+        "zombieMutatedFeral": (M_SOLID, None, None),
+        "zombieMutatedRadiated": (M_SOLID, None, None),
+        "zombieNurse": (M_SOLID, None, None),  # body
+        "zombieNurseFeral": (M_SOLID, None, None),  # body
+        "zombieNurseRadiated": (M_SOLID, None, None),  # body
+        "zombiePartyGirl": (M_SOLID + M_GLOW, None, None),
+        "zombiePartyGirlFeral": (M_SOLID + M_GLOW, None, None),
+        "zombiePartyGirlRadiated": (M_SOLID + M_GLOW, None, None),
+        "zombieScreamer": (M_SOLID, None, None),
+        "zombieScreamerFeral": (M_SOLID, None, None),
+        "zombieScreamerRadiated": (M_SOLID, None, None),
+        "zombieSkateboarder": (M_SOLID, None, None),  # body
+        "zombieSkateboarderFeral": (M_SOLID, None, None),  # body
+        "zombieSkateboarderRadiated": (M_SOLID, None, None),  # body
+        "zombieSoldier": (M_SOLID, M_GLOW, None),  # body
+        "zombieSoldierFeral": (M_SOLID, None, None),
+        "zombieSoldierRadiated": (M_SOLID, None, None),
+        "zombieSpider": (M_SOLID, None, None),  # body
+        "zombieSpiderFeral": (M_SOLID, None, None),  # body
+        "zombieSpiderRadiated": (M_SOLID, None, None),  # body
+        "zombieSteve": (M_SOLID, M_GLOW, None),  # body, eyes
+        "zombieSteveCrawler": (M_SOLID, M_GLOW, None),
+        "zombieSteveCrawlerFeral": (M_SOLID, M_GLOW, None),  # body, eyes
+        "zombieSteveFeral": (M_SOLID, M_GLOW, None),  # body, eyes
+        "zombieSteveRadiated": (M_SOLID, M_GLOW, None),  # body, eyes
+        "zombieTomClark": (M_SOLID, None, None),  # body
+        "zombieTomClarkFeral": (M_SOLID, None, None),  # body
+        "zombieTomClarkRadiated": (M_SOLID, None, None),  # body
+        "zombieUtilityWorker": (M_SOLID, None, None),  # body
+        "zombieUtilityWorkerFeral": (M_GLOW, None, None),  # eyes
+        "zombieUtilityWorkerRadiated": (M_GLOW, None, None),  # body
+        "zombieWightFeral": (M_GLOW, None, None),
+        "zombieWightRadiated": (M_GLOW, None, None),
+        "zombieYo": (M_SOLID, M_GLOW, None),  # body, hair
+        "zombieYoFeral": (M_SOLID, M_GLOW, None),  # body, hair
+        "zombieYoRadiated": (M_SOLID, M_GLOW, None),  # body, hair
+    }
 
     # structure to cut down on duplicate variants
     seen_variations = {}
 
-    def replace_materials(self, entity: ET.Element, is_enemy: bool) -> ET.Element:
+    def modify_materials(self, entity: ET.Element) -> ET.Element:
         """
         Based on information from Robeloto's mod, for some entities replace the meshes to make them freaky.
 
         Enabled with --meshes
 
-        NOTES:
-        Material0 is likely overall body
-        Material1 is likely eye coloring
-        Material2 is possibly particle effects or hair
-
         :param entity: source element
-        :param is_enemy: True if zombie or hostile animal
         :return: modified element
         """
         entity_name = entity.attrib.get('original_name', None)
 
-        chance = 0.5 if not self.mesh_always else 1.0
+        # Check to see if material allowed
+        if entity_name not in self.MAT_ALLOWED:
+            raise RuntimeError(f"`{entity_name}` not seen for freaky materials!")
+        else:
+            grp0 = self.MAT_ALLOWED[entity_name][0]
+            grp1 = self.MAT_ALLOWED[entity_name][1]
+            grp2 = self.MAT_ALLOWED[entity_name][2]
+
+        chance = self.mesh_percent
+        if self.research:
+            chance = 1.0
 
         three_strikes = 0  # used to prevent endless looping on material choice
+
+        key = ""
         choice0 = None
         choice1 = None
         choice2 = None
-
-        # not sure if these are even used, adding just in case
-        choice3 = None
-        choice4 = None
-        choice5 = None
-
-        key = ""
         while three_strikes < 3:
-            # chance of material0
-            if self.rand.random() < chance and is_enemy:
-                choice0 = self.rand.choice(self.choices0)
 
-            # chance of material1, automatic if material0 changed
-            if (self.rand.random() < chance or choice0 is not None) and is_enemy:
-                if choice0 in self.transparent or choice0 in self.glowing or choice0 in self.ephemeral:
-                    choice1 = self.rand.choice(self.solid)  # no glowy if transparent or glowy
-                elif choice0 in self.solid:
-                    choice1 = self.rand.choice(self.glowing)
-                else:
-                    choice1 = self.rand.choice(self.choices1)
+            # chance of material0
+            if grp0 is not None and self.rand.random() < chance:
+                choice0 = self.rand.choice(grp0)
+            else:
+                choice0 = None
+
+            # chance of material1
+            if grp1 is not None and self.rand.random() < chance:
+                choice1 = self.rand.choice(grp1)
+            else:
+                choice1 = None
 
             # chance of material2
-            if self.rand.random() < chance and is_enemy:
-                choice2 = self.rand.choice(self.choices2)
-
-            # chance of material3
-            if self.rand.random() < chance and is_enemy:
-                choice3 = self.rand.choice(self.choices1)
-
-            # chance of material4
-            if self.rand.random() < chance and is_enemy:
-                choice4 = self.rand.choice(self.choices1)
-
-            # chance of material5
-            if self.rand.random() < chance and is_enemy:
-                choice5 = self.rand.choice(self.choices1)
+            if grp2 is not None and self.rand.random() < chance:
+                choice2 = self.rand.choice(grp2)
+            else:
+                choice2 = None
 
             key = f"{entity_name}-{choice0}-{choice1}-{choice2}"
             if choice0 is None and choice1 is None and choice2 is None:
@@ -1662,27 +1915,30 @@ class RandEnt(object):
             entity = self.add_property_if_missing(entity, "ReplaceMaterial2", choice2,
                                                   replacable=True)
 
-        if choice3 is not None:
-            entity = self.add_property_if_missing(entity, "ReplaceMaterial3", choice3,
-                                                  replacable=True)
-        if choice4 is not None:
-            entity = self.add_property_if_missing(entity, "ReplaceMaterial4", choice4,
-                                                  replacable=True)
-        if choice5 is not None:
-            entity = self.add_property_if_missing(entity, "ReplaceMaterial5", choice5,
-                                                  replacable=True)
+        # freak animals have reduced meat
+        if choice0 is not None:
+            logger.debug(" ... is a FREAK!")
+            entity.attrib['trub_freak'] = "yes"
+            self.freak_count += 1
 
         return entity
 
     def modify_harvestables(self, zed: ET.Element) -> ET.Element:
         """
         The bigger the more stuff you can get off them; likewise smaller has less on them.
-         Scaling is always +/- 10%.
+        Scaling is always +/- 10%.
+
+        Freaky entities have HALF the usable harvestable supplies
+
 
         :param zed: source element
         :return: modified element
         """
+        # we use a modified power scale such that x2 in size is not x2 in resources
         scaling = pow(float(self.get_trub_scale(zed)) / 100.0, 0.85)  # 2x -> x1.8; 3x -> x2.5, 1/2 -> x0.6
+        if self.is_freak(zed):
+            logger.debug(" ... harvestables cut in half")
+            scaling = scaling / 2.0
 
         for node in zed.findall(f".//drop[@event='Harvest']"):
             val = node.attrib['count']
@@ -1714,12 +1970,7 @@ class RandEnt(object):
         if self.altered_ai and is_enemy and is_animal:
             new_entity = self.alter_hostile_animal_ai(new_entity)
 
-        # check for raging stags
-        if is_animal and not is_enemy and self.raging_stag:
-            new_entity = self.raging_stag_ai(new_entity)
-
         for cfg_property_key in config_keys:
-
             if cfg_property_key in ['disable_randomizer', 'num_generation_loops', 'ignore_entity_list',
                                     'enable_walktype_crawler_limit']:
                 continue
@@ -1732,6 +1983,37 @@ class RandEnt(object):
             if self.is_entity_blocked_for_property(entity_config_key, cfg_property_key, entity_name):
                 continue
 
+            if cfg_property_key in ["MoveSpeed", "MoveSpeedPanic", "SwimSpeed"]:
+                use_scale = None
+                # for muchkins, speed them up a bit to counteract their small size
+                if not is_animal and self.munchkins:
+                    use_scale = math.sqrt(100.0 / float(self.get_trub_scale(new_entity)))
+                if self.research:  # extra slow to allow for examination
+                    use_scale = 0.01
+
+                new_entity = self.alter_property(new_entity, cfg_property_key, scale=use_scale, variance=(0.2, 0.5),
+                                                 default=None, limits=None)
+
+                continue
+
+            if cfg_property_key in ["MoveSpeedAggro"]:
+                use_scale = None
+                # for muchkins, speed them up a bit to counteract their small size
+                if not is_animal and self.munchkins:
+                    use_scale = math.sqrt(100.0 / float(self.get_trub_scale(new_entity)))
+                if self.research:  # extra slow to allow for examination
+                    use_scale = 0.01
+
+                new_entity = self.alter_property_duplex(new_entity, cfg_property_key, scale=use_scale,
+                                                        variance=(0.2, 0.50),
+                                                        default=None, limits=None)
+                continue
+
+            if cfg_property_key in ["JumpMaxDistance"]:
+                new_entity = self.alter_property_duplex(new_entity, cfg_property_key, scale=None, variance=(0.2, 0.5),
+                                                        default="2.0, 3.0", limits=None)
+                continue
+
             args = self.get_entity_config_file_configs(entity_config_key, cfg_property_key, entity_name)
 
             # Get the randomizer function name to use from defaults
@@ -1742,8 +2024,10 @@ class RandEnt(object):
             elif rand_function_key == 'custom_TintMaterial':
                 new_entity = self.randomize_tint(new_entity)
             elif rand_function_key == 'custom_MassAndWeightAndSizeScale':
-                new_entity = self.vary_size_and_mass(new_entity, args)
+                new_entity = self.vary_size_and_mass(new_entity)
             elif rand_function_key == 'custom_HealthAndExperienceGain':
+                if self.research:
+                    new_entity = self.vary_health_and_exp(new_entity, args, 0.01, pow(self.hsmeat, 0.5))
                 if self.headshot and not is_animal:  # headshot shamblers only
                     new_entity = self.vary_health_and_exp(new_entity, args, self.hsmeat, pow(self.hsmeat, 0.5))
                 else:
@@ -1759,34 +2043,28 @@ class RandEnt(object):
                         use_scale = self.hsspeed
                     if self.munchkins and cfg_property_key == "MoveSpeedAggro":
                         use_scale = int(10000.0 / float(self.get_trub_scale(new_entity)) + 0.5)
+                    if self.research:  # extra slow to allow for examination
+                        use_scale = 1
                     use_args['scale'] = str(use_scale)
                 new_entity = self.randomize_ranged_property_from_dual_ranges(new_entity, cfg_property_key,
                                                                              use_args)
             elif rand_function_key == 'setcreate_rand_around_percent':
                 new_entity = self.vary_property_around_base_value(new_entity, cfg_property_key, args)
 
-            if cfg_property_key == "MoveSpeed":
-                use_scale = 100
-                if not is_animal and self.headshot:
-                    use_scale = self.hsspeed
-                if not is_animal and self.munchkins:
-                    use_scale = int(10000.0 / float(self.get_trub_scale(new_entity)) + 0.5)
-                if use_scale != 100:
-                    new_entity = self.scale_property(new_entity, cfg_property_key,
-                                                     {'pct_random_int': f"{use_scale}",
-                                                      'default': "1.0"})
+        # check for raging stags
+        if is_animal and not is_enemy and self.raging_stag:
+            new_entity = self.raging_stag_ai(new_entity)
 
-
-        # additions for odd strange zombies and hostile animals
+        # additions for odd strange zombies and animals
         if self.meshes:
-            new_entity = self.replace_materials(new_entity, is_enemy)
+            new_entity = self.modify_materials(new_entity)
 
         # handle size affecting harvesting
         new_entity = self.modify_harvestables(new_entity)
 
         return new_entity
 
-    def zed_generate(self) -> None:
+    def generate_zombie(self) -> None:
         """
         Zombie Generate.
         """
@@ -1800,17 +2078,15 @@ class RandEnt(object):
         the_key = 'ConfigEntityZombie'
 
         # NOTE: looping goes 1 for each type, looped should probably be reversed
-        for i in range(int(self.CONFIGS[the_key]['num_generation_loops'])):  # may be str in json
-            if self.CONFIGS[the_key]['disable_randomizer'] == 1:
-                logger.info(f"!! Ignoring entity: {the_key}  Reason: Entire entity group disabled in config file")
-                break
+        for entity_name in sorted(entity_class_zombies):
+            # Check to see if we should not randomise this entity
+            if entity_name in self.CONFIGS[the_key]['ignore_entity_list']:
+                continue
 
-            for entity_name in entity_class_zombies:
-                # Check to see if we should not randomise this entity
-                if entity_name in self.CONFIGS[the_key]['ignore_entity_list']:
-                    # logger.info(f"Ignoring entity: {entity_name} Reason: "
-                    #             f"{self.CONFIGS[the_key]['ignore_entity_list'][entity_name]}")
-                    continue
+            for i in range(int(self.CONFIGS[the_key]['num_generation_loops'])):  # may be str in json
+                if self.CONFIGS[the_key]['disable_randomizer'] == 1:
+                    logger.info(f"!! Ignoring entity: {the_key}  Reason: Entire entity group disabled in config file")
+                    break
 
                 # Clone entity
                 self.zed_library[entity_name] = True
@@ -1832,7 +2108,7 @@ class RandEnt(object):
                 self.NEW_ENTITIES[new_entity_name]['zed_is_from'] = entity_name
                 self.NEW_ENTITIES[new_entity_name]['zed_node'] = new_entity
 
-    def enemy_animal_generate(self) -> None:
+    def generate_enemy_animal(self) -> None:
         """
         Enemy Animal Generation.
         """
@@ -1840,23 +2116,19 @@ class RandEnt(object):
 
         self.hostile_animal_library = {}
 
-        # Get all the entity_class-es we want to handle, by type
+        # Get all the entity_classes we want to handle, by type
         entity_class_hostile_animals = self.TYPE_ENTITY_LOOKUP['EntityEnemyAnimal']
         self.TOTAL_HOSTILE_ANIMAL_ENTITIES_FOUND = len(entity_class_hostile_animals)
         the_key = 'ConfigEntityEnemyAnimal'
 
-        # NOTE: looping goes 1 for each type, looped should probably be reversed
-        for i in range(int(self.CONFIGS[the_key]['num_generation_loops'])):
-            if self.CONFIGS[the_key]['disable_randomizer'] == 1:
-                logger.info(f"!! Ignoring entity: {the_key}  Reason: Entire entity group disabled in config file")
-                break
+        for entity_name in sorted(entity_class_hostile_animals):
+            if entity_name in self.CONFIGS[the_key]['ignore_entity_list']:
+                continue
 
-            for entity_name in entity_class_hostile_animals:
-                # Check to see if we should not randomise this entity
-                if entity_name in self.CONFIGS[the_key]['ignore_entity_list']:
-                    # logger.info(f"Ignoring entity: {entity_name} Reason: "
-                    #             f"{self.CONFIGS[the_key]['ignore_entity_list'][entity_name]}")
-                    continue
+            for i in range(int(self.CONFIGS[the_key]['num_generation_loops'])):
+                if self.CONFIGS[the_key]['disable_randomizer'] == 1:
+                    logger.info(f"!! Ignoring entity: {the_key}  Reason: Entire entity group disabled in config file")
+                    break
 
                 # Clone entity
                 self.hostile_animal_library[entity_name] = True
@@ -1874,7 +2146,7 @@ class RandEnt(object):
                 self.NEW_ENTITIES[new_entity_name]['zed_is_from'] = entity_name
                 self.NEW_ENTITIES[new_entity_name]['zed_node'] = new_entity
 
-    def friendly_animal_generate(self) -> None:
+    def generate_friendly_animal(self) -> None:
         """
         Timid Animal Generation.
         """
@@ -1889,15 +2161,15 @@ class RandEnt(object):
         the_key = 'ConfigEntityFriendlyAnimal'
 
         # NOTE: looping goes 1 for each type, looped should probably be reversed
-        for i in range(int(self.CONFIGS[the_key]['num_generation_loops'])):
-            if self.CONFIGS[the_key]['disable_randomizer'] == 1:
-                logger.info(f"!! Ignoring entity: {the_key}  Reason: Entire entity group disabled in config file")
-                break
+        for entity_name in sorted(entity_class_friendly_animals):
+            # Check to see if we should not randomise this entity
+            if entity_name in self.CONFIGS[the_key]['ignore_entity_list']:
+                continue
 
-            for entity_name in entity_class_friendly_animals:
-                # Check to see if we should not randomise this entity
-                if entity_name in self.CONFIGS[the_key]['ignore_entity_list']:
-                    continue
+            for i in range(int(self.CONFIGS[the_key]['num_generation_loops'])):
+                if self.CONFIGS[the_key]['disable_randomizer'] == 1:
+                    logger.info(f"!! Ignoring entity: {the_key}  Reason: Entire entity group disabled in config file")
+                    break
 
                 # Clone entity
                 self.timid_animal_library[entity_name] = True
@@ -1956,6 +2228,49 @@ class RandEnt(object):
         logger.debug(f"Starting Entities file: {self.entities_xml_file}")
         with open(self.entities_xml_file, 'w') as fp:
             fp.write(f"<{self.prefix}>" + "\n")
+
+            if self.errornull:
+                fp.write("""
+<!-- player chance of ragdoll when hit by a zombie or animal with 'knockdown' tag -->
+<append xpath="/entity_classes/entity_class[@name='playerMale']">
+    <effect_group>
+        <triggered_effect trigger="onOtherDamagedSelf" action="AddBuff" target="self" buff="buffInjuryKnockdown01">
+            <requirement name="RandomRoll" seed_type="Random" min_max="0,100" operation="LTE" value="25"/>
+            <requirement name="NotHasBuff" target="self" buff="buffInjuryKnockdown01Cooldown"/>
+            <requirement name="EntityTagCompare" target="other" tags="enKnockdown25"/>
+        </triggered_effect>
+    </effect_group>
+    <effect_group>
+        <triggered_effect trigger="onOtherDamagedSelf" action="AddBuff" target="self" buff="buffInjuryKnockdown01">
+            <requirement name="RandomRoll" seed_type="Random" min_max="0,100" operation="LTE" value="50"/>
+            <requirement name="NotHasBuff" target="self" buff="buffInjuryKnockdown01Cooldown"/>
+            <requirement name="EntityTagCompare" target="other" tags="enKnockdown50"/>
+        </triggered_effect>
+    </effect_group>
+    <effect_group>
+        <triggered_effect trigger="onOtherDamagedSelf" action="AddBuff" target="self" buff="buffInjuryKnockdown01">
+            <requirement name="RandomRoll" seed_type="Random" min_max="0,100" operation="LTE" value="75"/>
+            <requirement name="NotHasBuff" target="self" buff="buffInjuryKnockdown01Cooldown"/>
+            <requirement name="EntityTagCompare" target="other" tags="enKnockdown75"/>
+        </triggered_effect>
+    </effect_group>
+</append>
+
+<!-- Add knockdown ability to vanilla bears -->
+<set xpath="/entity_classes/entity_class[@name='animalBear']/property[@name='Tags']/@value">entity,animal,hostile,bear,perkAT03,enKnockdown50</set>
+<set xpath="/entity_classes/entity_class[@name='animalZombieBear']/property[@name='Tags']/@value">entity,animal,zombie,hostile,bear,enKnockdown50</set>
+
+<!--
+By default, zombie HP varies from -20% to +15% of base value. Changing this to go from 0% to 20%. This only impacts
+ the normal zombie variation. Feral, crawler, and radiated variations use different code to add this new variability.
+-->
+
+<set xpath="/entity_classes/entity_class[@name='zombieTemplateMale']/effect_group[@name='Base Effects']/passive_effect[@name='HealthMax' and @operation='perc_add']/@value">0,0.2</set>
+<set xpath="/entity_classes/entity_class[@name='animalTemplateHostile']/effect_group[@name='Base Effects']/passive_effect[@name='HealthMax' and @operation='perc_add']/@value">-0.1,0.1</set>
+<set xpath="/entity_classes/entity_class[@name='animalTemplateTimid']/effect_group[@name='Base Effects']/passive_effect[@name='HealthMax' and @operation='perc_add']/@value">-0.1,0.1</set>
+
+""")
+
             fp.write('<append xpath="/entity_classes">' + "\n")
 
         # EntityGroups file
@@ -2067,9 +2382,10 @@ class RandEnt(object):
             if self.no_scale:
                 fp.write(f" - no size variations\n")
             if self.meshes:
-                fp.write(f" - with freak meshes\n")
-            if self.mesh_always:
-                fp.write(f"    - 100% chance\n")
+                chance = int(self.mesh_percent * 100)
+                fp.write(f" - with {chance}% possible freaky mesh\n")
+                if self.freak_count > 0:
+                    fp.write(f"   ... {self.freak_count} freak entities\n")
             if self.altered_ai:
                 chance = int(self.altered_ai_percent * 100)
                 fp.write(f" - with {chance}% possible altered hostile AI\n")
@@ -2090,10 +2406,19 @@ class RandEnt(object):
                 fp.write(f"    - headshot power {self.hspower}%\n")
                 fp.write(f"    - zombie meat {self.hsmeat}x\n")
                 fp.write(f"    - zombie speed {self.hsspeed}%\n")
+            if self.research:
+                fp.write(f" - with research mode\n")
             fp.write("\n--------------------------------------------------\n")
             fp.write("BIGGEST:\n")
             for n, v in sorted(self.biggest.items()):
                 fp.write(f"   {n:30s} - {v:5d} hp\n")
+            fp.write("\n--------------------------------------------------\n")
+            fp.write("OTHER DETAILS:\n")
+            maxkey = 0
+            for k, v in sorted(self.details.items()):
+                maxkey = max(maxkey, len(k))
+            for k, v in sorted(self.details.items()):
+                fp.write(f"   {k:{maxkey}s} - {v}\n")
 
     def modlet_generate(self) -> None:
         """
@@ -2150,17 +2475,17 @@ def build_cli_parser() -> argparse.Namespace:
     parser.add_argument("--version", action="store", dest="version", default=None,
                         help="(optional) game version this is derived from")
 
-    parser.add_argument("-z", action="store", type=int, dest="zcount", default=-1,
+    parser.add_argument("-z", action="store", type=int, dest="zcount", default=10,
                         help="count for zombie variants (default x10")
-    parser.add_argument("-f", action="store", type=int, dest="fcount", default=-1,
+    parser.add_argument("-f", action="store", type=int, dest="fcount", default=10,
                         help="count for friendly animal variants (default x10)")
-    parser.add_argument("-e", action="store", type=int, dest="ecount", default=-1,
+    parser.add_argument("-e", action="store", type=int, dest="ecount", default=30,
                         help="count for enemy animal variants (default x30)")
 
     parser.add_argument("-m", action="store_true", dest="meshes", default=False,
-                        help="If specified enable freaky meshes")
-    parser.add_argument("--ma", action="store_true", dest="mesh_always", default=False,
-                        help="If specified, all mesh variants are 100% freaks (instead of 33% chance for each area)")
+                        help="If specified enable freaky meshes (default 33%)")
+    parser.add_argument("--mp", action="store", dest="mesh_percent", default=33,
+                        help="Specify chance of freaky mesh")
 
     parser.add_argument("-g", action="store_true", dest="giants", default=False,
                         help="If specified, land of the giants")
@@ -2188,6 +2513,12 @@ def build_cli_parser() -> argparse.Namespace:
                         help="If specified, chance of hostile AI for stags (default 33%)")
     parser.add_argument("--rp", action="store", type=int, dest="raging_stag_percent", default=33,
                         help="Specify chance of raging stags")
+
+    parser.add_argument("--research", action="store_true", dest="research", default=False,
+                        help="If specified, 500% size, 1% move, move mode 2")
+
+    parser.add_argument("--en0", action="store_true", dest="errornull", default=False,
+                        help="If specified, add in errornull tweaks")
 
     args = parser.parse_args()
 
@@ -2220,11 +2551,11 @@ def main():
     engine = RandEnt(args)
 
     engine.initial_setup()
-    engine.generate_lookup_tables()
+    engine.create_lookup_tables()
 
-    engine.zed_generate()
-    engine.enemy_animal_generate()
-    engine.friendly_animal_generate()
+    engine.generate_zombie()
+    engine.generate_enemy_animal()
+    engine.generate_friendly_animal()
 
     if not args.dryrun:
         engine.modlet_generate()
