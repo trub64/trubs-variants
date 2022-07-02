@@ -429,7 +429,5 @@ This option allows you to override the chance of raging stags, with a valid rang
 Used primarily to check new freaky mesh materials.  It has the effect of increasing the `trub_scale` to 500, reducing `MoveSpeed` to 0.01 and altering `MoveType` to 2. 
 
 #### 3.8.1. --research
-This option enables research mode
+This option enables research mode.
 
-#### 3.9 ErrorNull Tweaks
-Inspired by ErrorNull0's wonderful mod, adding some of his knockdown
