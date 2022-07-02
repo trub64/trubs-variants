@@ -312,10 +312,11 @@ The program relies (at present) on the use of a configuration file in JSON forma
   "game_install_dir":"/Users/<username>/Library/Application Support/Steam/steamapps/common/7 Days To Die/7DaysToDie.app",
 ```
 
-This configuration is currently defined for a Mac user (sorry, it's what I have).  I would like to have the system be a bit smarter and go to the right place based on your system, but that awaits me getting some install path information.  For now, if running on windows, you will need to change this path to point to the proper location that contains your "/Data/Config" folders.
+This configuration is currently defined for a Mac user (sorry, it's what I use). It will automatically replace `<username>` with your actual username when the file is read in.  For windows users, you probably want to replace that configuration with something like:
+```text
+  "game_install_dir":"C:\Program Files (x86)\Steam\steamapps\common\7 Days To Die\Data\Config",
+```
 
-> _**NOTE:** This is still a work in progress, in terms of making it generally available -- I would like to have this seamless, but that will require some outside data for me._
-> 
 ### 3.1. General Options
 
 #### 3.1.1. --config {path}
@@ -330,13 +331,13 @@ primarily used for testing, exceutes the program to check for any execution erro
 #### 3.1.5. --version
 This option allows you to add 7d2d version information to the name of your generated mod directory name.  using `--version a20.2` would add the string `-a20.2` to the name of the mod folder. 
 
-### 3.2. Numbers Options
+### 3.2. Quantity Options
 The following options determine the number of variants to be generated for each class of entity.
 
 #### 3.2.1. -z
 Indicates how many zombie variants are to be generated.  If not specified, the default is "10" (10 times the number of base zombie definitions).
 
-> _**NOTE:** The default of x10 will create 860 (as of a20.2) variants; higher values may result in very long load times._
+> _**NOTE:** The default of x10 will create 860 (as of a20.2) variants; higher numbers of variants may result in long load times._
 
 #### 3.2.2. -f
 Indicates how many friendly animal (chicken, rabbit, etc) variants are to be generated.  If not specified, the default is "10".
@@ -348,27 +349,39 @@ Indicates how many hostile animal (snake, wolf, etc) variants are to be generate
 This option allows for some alternate zombie forms as seen in mods created by Robeloto.  It alters the various meshes with texture files, producing various "freaks" of nature.
 
 #### 3.3.1. -m
-This option enables the creation of zombies and hostile animal variants with a chance of having their texture changed to something other than the normal mesh.  This can produce some very odd entities with a "fire elemental", "mummy" or "glass" look to them. 
+This option enables the creation of zombies and hostile animal variants with a chance of having their texture changed to something other than the normal mesh.  This can produce some very odd entities with an "iron", "mummy" or "mucky" look to them, though for some zombie types only hair may be affected. 
 
 #### 3.3.2. -mp
-If specified this allows you to specify the percent chance of freak material for an entity, from 1 to 100.  If not used, the default is 33.
+If specified this allows you to specify the percent chance of freak material for an entity, from 1 to 100.  If not specified, the default is 33 (33% chance)
 
 ### 3.4. Sizing Options
-By default this variant tries to alter the entity size by some degree so as to produce a better variety.  For zombies this is done by altering their scale to one of  85%, 90%, 95%, 100%, 105%, 110%, and 115%.  Animals have additional possibilities of 50%, 75%, 125%, and 150%, with timid animals having an additional chance of 200%, and 250%.  This can produce seemingly "baby animals", along with huge wolves and "riding chickens".
+By default this variant tries to alter the entity size by some degree so as to produce a variety of sizes.  A value is chosen as  75, 100 or 125 for zombies;  all animals have additional possibilities of 50 and 150, with timid animals having chances of 175, 200, 225 and 250. This chosen value is then varied by +/- 10% to create the final `trub_scale` (considered a percent, so 150 equals 150%, or x1.5). 
 
-Sizing will alter the hit capacity by a power of 1.66 if greater than 100% and a power of 0.6 if lesser.  In addition, mass (which can affect knockback from hits or explosions) is based on the "mass-cubed" rule, so something with double the size will have eight times the mass (and likewise, at half the size will have one-eighth the mass).
+This value (seen as an attribute for generated entities) has the following effects:
 
-Sizing will modify damage -- something that is 150% size will do 150% damage!
+1) `SizeScale` for the new variant equals the original value multiplied by the `trub_scale`, capped at a lower limit of 0.25 and an upper limit of 2.0.  This will produce the effects of  "baby animals", along with taller/shorter zombies and "riding chickens". 
 
-Sizing  also affects harvesting to a limited degree.  Scale is used at a 0.85 power, so something that is 200% will return about 180% in harvestables, while something at 50% size will produce aboutt 60% harvestables.
+2) `HealthMax` is modified on a slight power curve based on the assumption that a greater/larger cross-section implies a slightly greater/lesser damage capacity.  The original `HealthMax` is multiplied by `trub_scale` raised to a power of 1.33 to produce the new value (thus, at 200 `trub_scale`, the actual multiplier is about x2.5; at 50 the actual multiplier is about x0.4)
+   * Raging Stags (see later option) have an additional x2.0 multiplier to account for their smaller base hit points, to make them a little more dangerous.
+
+   The actual ration of new `HealthMax` to the original value is used as a multiplier to the `ExperienceGain` value
+
+3) `Mass` is based on a more reduced "mass-squared" rule, so something with a `trub_scale` of 200 will have a `Mass` multiplier of x4.0 (and likewise, a 50 will have a `Mass` multiplier of x0.25).  This further tweaked by a random +/- 10% for some variance.  Smaller animals will tend to be knocked farther on a strong hit, but larger animals won't move as much.  `Mass` is capped at a lower limit of 2 and an upper limit of 20000.
+
+4) `EntityDamage` and `BlockDamage` will be altered by a root power curve since being bigger does not produce linearly stronger hits.(and to prevent large entities from completely on-shotting players).  The original damage values are multiplied by the `trub_scale` raised to the 0.75 power (a 200 scale entity will do about x1.7 damage, a 50 scale one will do about x0.6).  This is further varied by +/- 10% for each danmage type and calculated to determine a `perc_add` for each damage type.
+
+5) Havestables defined with `Harvest` are affected by a root power curve as well. The `trub_scale` raised to the 0.85 power multiplies the original harvestable value, +/- 10%.
+   * Entities with a freak mesh will have HALF the figured harvestables
 
 #### 3.4.1. -g
-This enables "Land of the Giants" mode (see `https://www.youtube.com/watch?v=nHQ_r8ZwPOw`).  This can be quite freaky.  While I would have liked to actually have entities 10x the size of normal players, unfortunatly at such size they seem to be unable to hit you.  With some playing around I found that applying sizings of 150%, 175%, 200%, 225%, and 250% worked ok (POI zombies will tend to get stuck in buildings, but in the wilds will be ok).  Timid and hostile animals have 275% and 300% options.
+This enables "Land of the Giants" mode (see `https://www.youtube.com/watch?v=nHQ_r8ZwPOw`).  While I would have liked to actually have entities 10x the size of normal players, unfortunatly at such size they seem to be unable to hit you.  
+
+This mode creates `trub_scale` sizes of 150, 175, 200, 225, and 250 for zombies, with 275 and 300 allowed for animals. POI zombies will tend to get stuck in buildings, but wandering zombies shound be ok.
 
 This option is incompatible with `-k` or `-ns`
 
 #### 3.4.2. -k
-This enables "Munchkin" mode.  Zombies are give a scaling range of 45%, 50%, 55%, 60%, 65%, or 70%, while animals get a range of 50%, 80%, 90%, 100%, 110%, and 120%.  This can be quite tricky if you encounter a horde in tall grass, and the hit box is tougher.
+This enables "Munchkin" mode.  Zombies are give a `trub_scale`  25, 50, or 75,  while animals get a choice of 25, 50, 75 or 100.  In both cases a +/- 10% variance is also added.  This can be quite tricky if you encounter a horde in tall grass, and the hit box is tougher.
 
 This option is incompatible with `-g` or `-ns`
 
@@ -389,25 +402,34 @@ This option enables the mode.
 This option allows you to modify the amount of damage a head shot does as compared to hits to other areas.  If not specified, the default value is 150 (150x weapon damage).
 
 ##### 3.5.1.2. --hs-meat  {value}
-This option allows you to modify the overall toughness of the the entity, making it more critical that you deliver head shots.  If not specified, the default value is 3.0 (3x base hits).
+This option allows you to modify the overall toughness of the the entity, making it more critical that you deliver head shots.  If not specified, the default value is 5.0 (5x `HealthMax`).
 
 ##### 3.5.1.3. --hs-speed {value}
 This option allows you modify the movement speed for zombies in this mode.  This is on top of any speed variations applied by the program itself. If not specified, the default value is 25 (25% speed).
 
 ### 3.6. Altered AI Options
-In order to mix things up a bit, this option can be used to tweak the AI of some hostile animals and zombies.  What it does is to have a 33% chance of choosing a different AI and swapping it out.  Thus you could have pigs that act like mountain lions, or fat cops that act like snakes.
+In order to mix things up a bit, this option can be used to tweak the AI of hostile animals.  What it does is to have a chance of choosing a different AI set, replacing the original for the enitity.  Thus you could have pigs that act like mountain lions or coyotes that act like zombies.
 
 #### 3.6.1. -a
 This option enables the generation of altered AI.
 
 ##### 3.6.1.1. --ap {value}
-This option allows you to override the chance of altered AI on variants, with a valid range of 1 to 100.
+This option allows you to override the chance of altered AI on variants, with a valid range of 1 to 100.  If not specified, the default vale is 33.
 
 ### 3.7. Raging Stags
-Are they rabid?  This option makes 25% of the stag variants aggressive, giving them an AI from the list used by the altered AI option.
+Are they rabid?  This option makes some of the stag variants aggressive, giving them an AI from the list used by the altered AI option.
 
 #### 3.7.1. -r
 This option enables the generation of raging stags.
 
 ##### 3.7.1.1. --rp {value}
-This option allows you to override the chance of raging stags, with a valid range of 1 to 100.
+This option allows you to override the chance of raging stags, with a valid range of 1 to 100.  If not specified, the default vale is 33.
+
+#### 3.8 Research mode
+Used primarily to check new freaky mesh materials.  It has the effect of increasing the `trub_scale` to 500, reducing `MoveSpeed` to 0.01 and altering `MoveType` to 2. 
+
+#### 3.8.1. --research
+This option enables research mode
+
+#### 3.9 ErrorNull Tweaks
+Inspired by ErrorNull0's wonderful mod, adding some of his knockdown

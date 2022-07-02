@@ -169,10 +169,6 @@ class RandEnt(object):
         if self.research:
             self.cmd += "--research "
 
-        self.errornull = args.errornull
-        if self.errornull:
-            self.cmd += "--en0 "
-
         self.prefix = ""
 
         # hold info about the generation
@@ -251,10 +247,9 @@ class RandEnt(object):
         tag4 = "_AI" if self.altered_ai else ""
         tag5 = "_RS" if self.raging_stag else ""
         tag6 = "_research" if self.research else ""
-        tag7 = "_en0" if self.errornull else ""
         gv = "" if self.game_version is None else f"-{self.game_version}"
         self.CONFIGS['modlet_name'] = (
-            f"{self.CONFIGS['modlet_name_prefix']}{tag}{tag2a}{tag2b}{tag3}{tag4}{tag5}{tag6}{tag7}"
+            f"{self.CONFIGS['modlet_name_prefix']}{tag}{tag2a}{tag2b}{tag3}{tag4}{tag5}{tag6}"
             f"{gv}")
         self.CONFIGS['modlet_gen_dir'] = self.repository + '/' + self.CONFIGS['modlet_name']
 
@@ -748,7 +743,7 @@ class RandEnt(object):
         return entity
 
     def find_all_nodes(self, entity: ET.Element, property_name: str,
-                       no_dive: bool = False, quiet:bool = False, diving:bool=False) -> Optional[ET.Element]:
+                       no_dive: bool = False, quiet: bool = False, diving: bool = False) -> Optional[ET.Element]:
         nodes = entity.findall(f".//property[@name='{property_name}']")
         if len(nodes) == 0:
             if no_dive:
@@ -1019,15 +1014,16 @@ class RandEnt(object):
         # get previously determined overall scale
         trub_scale = self.get_trub_scale(entity)  # where "100" = 100%
 
+        limit = 10.0 if self.research else 2.0
         entity = self.alter_property(entity, 'SizeScale', scale=float(trub_scale) / 100.0, variance=(0.1, 0.1),
-                                     default="1.0", limits=(0.25, 2.0))
+                                     default="1.0", limits=(0.25, limit))
 
-        # Mass uses size-cubed rule for gross mass
-        cubed = pow(float(trub_scale) / 100.0, 3)
+        # Mass uses size-squared rule for gross mass
+        cubed = pow(float(trub_scale) / 100.0, 2)
 
         # Use SizeScale change ratio to affect mass
         entity = self.alter_property(entity, 'Mass', scale=cubed, variance=(0.1, 0.1), default=None,
-                                     limits=(2.0, 100000.0), is_float=False)
+                                     limits=(2.0, 20000.0), is_float=False)
 
         return entity
 
@@ -1051,14 +1047,11 @@ class RandEnt(object):
             if health.attrib.get('operation', None) != "base_set":
                 continue
 
-            if ts_float >= 1:
-                use_scaling = pow(ts_float, 1.66)  # larger is a power
-            else:
-                use_scaling = pow(ts_float, 0.6)  # smaller is a root
+            use_scaling = pow(ts_float, 1.33)
 
             # raging animals are tougher
             if self.is_raging(entity):
-                use_scaling = use_scaling * 3.0
+                use_scaling = use_scaling * 2.0
 
             original = health.attrib['value']  # original size
             new_val = self.vary_percent_around_number(original, pct_rand,
@@ -1089,29 +1082,30 @@ class RandEnt(object):
         :return: modified entity
         """
         trub_scale = self.get_trub_scale(entity)
-        if trub_scale == 100:
+        if int(trub_scale) == 100:
             return entity
 
-        ts_float = math.pow(float(trub_scale) / 100.0, 0.66)
+        use_scaling = float(trub_scale) / 100.0
+        ts_float = math.pow(use_scaling, 0.75)
+
         entity_mod = (self.rand.random() * 0.2 + 0.9) * ts_float
         block_mod = (self.rand.random() * 0.2 + 0.9) * ts_float
 
         for node in entity.findall(f".//effect_group[@name='Base Effects']"):
             new_entity = int((entity_mod - 1.0) * 100.0)
             new_block = int((block_mod - 1.0) * 100.0)
-            mode = "perc_add"
 
             item = ET.SubElement(node, 'passive_effect')
             item.set('name', "EntityDamage")
             item.set('value', f"{new_entity}")
-            item.set('operation', mode)
+            item.set('operation', "perc_add")
             item.tail = "\n    "
             item = ET.SubElement(node, 'passive_effect')
             item.set('name', "BlockDamage")
             item.set('value', f"{new_block}")
-            item.set('operation', mode)
+            item.set('operation', "perc_add")
             item.tail = "\n    "
-            logger.debug(f" + Added Damage '{mode}' as Entity {new_entity}/Block {new_block}")
+            logger.debug(f" + Added Damage 'perc_add' as Entity {new_entity}/Block {new_block}")
             break
 
         return entity
@@ -2228,49 +2222,6 @@ class RandEnt(object):
         logger.debug(f"Starting Entities file: {self.entities_xml_file}")
         with open(self.entities_xml_file, 'w') as fp:
             fp.write(f"<{self.prefix}>" + "\n")
-
-            if self.errornull:
-                fp.write("""
-<!-- player chance of ragdoll when hit by a zombie or animal with 'knockdown' tag -->
-<append xpath="/entity_classes/entity_class[@name='playerMale']">
-    <effect_group>
-        <triggered_effect trigger="onOtherDamagedSelf" action="AddBuff" target="self" buff="buffInjuryKnockdown01">
-            <requirement name="RandomRoll" seed_type="Random" min_max="0,100" operation="LTE" value="25"/>
-            <requirement name="NotHasBuff" target="self" buff="buffInjuryKnockdown01Cooldown"/>
-            <requirement name="EntityTagCompare" target="other" tags="enKnockdown25"/>
-        </triggered_effect>
-    </effect_group>
-    <effect_group>
-        <triggered_effect trigger="onOtherDamagedSelf" action="AddBuff" target="self" buff="buffInjuryKnockdown01">
-            <requirement name="RandomRoll" seed_type="Random" min_max="0,100" operation="LTE" value="50"/>
-            <requirement name="NotHasBuff" target="self" buff="buffInjuryKnockdown01Cooldown"/>
-            <requirement name="EntityTagCompare" target="other" tags="enKnockdown50"/>
-        </triggered_effect>
-    </effect_group>
-    <effect_group>
-        <triggered_effect trigger="onOtherDamagedSelf" action="AddBuff" target="self" buff="buffInjuryKnockdown01">
-            <requirement name="RandomRoll" seed_type="Random" min_max="0,100" operation="LTE" value="75"/>
-            <requirement name="NotHasBuff" target="self" buff="buffInjuryKnockdown01Cooldown"/>
-            <requirement name="EntityTagCompare" target="other" tags="enKnockdown75"/>
-        </triggered_effect>
-    </effect_group>
-</append>
-
-<!-- Add knockdown ability to vanilla bears -->
-<set xpath="/entity_classes/entity_class[@name='animalBear']/property[@name='Tags']/@value">entity,animal,hostile,bear,perkAT03,enKnockdown50</set>
-<set xpath="/entity_classes/entity_class[@name='animalZombieBear']/property[@name='Tags']/@value">entity,animal,zombie,hostile,bear,enKnockdown50</set>
-
-<!--
-By default, zombie HP varies from -20% to +15% of base value. Changing this to go from 0% to 20%. This only impacts
- the normal zombie variation. Feral, crawler, and radiated variations use different code to add this new variability.
--->
-
-<set xpath="/entity_classes/entity_class[@name='zombieTemplateMale']/effect_group[@name='Base Effects']/passive_effect[@name='HealthMax' and @operation='perc_add']/@value">0,0.2</set>
-<set xpath="/entity_classes/entity_class[@name='animalTemplateHostile']/effect_group[@name='Base Effects']/passive_effect[@name='HealthMax' and @operation='perc_add']/@value">-0.1,0.1</set>
-<set xpath="/entity_classes/entity_class[@name='animalTemplateTimid']/effect_group[@name='Base Effects']/passive_effect[@name='HealthMax' and @operation='perc_add']/@value">-0.1,0.1</set>
-
-""")
-
             fp.write('<append xpath="/entity_classes">' + "\n")
 
         # EntityGroups file
@@ -2488,9 +2439,11 @@ def build_cli_parser() -> argparse.Namespace:
                         help="Specify chance of freaky mesh")
 
     parser.add_argument("-g", action="store_true", dest="giants", default=False,
-                        help="If specified, land of the giants")
+                        help="If specified, land of the giants (incompatible with -k)")
     parser.add_argument("-k", action="store_true", dest="munchkins", default=False,
-                        help="If specified, land of the munchkins")
+                        help="If specified, land of the munchkins (incompatible with -g)")
+    parser.add_argument("--ns", action="store_true", dest="noscale", default=False,
+                        help="If specified, no size variation (overrides -g or -k)")
 
     parser.add_argument("--hs", action="store_true", dest="headshot", default=False,
                         help="If specified, hits are higher, speed is slower, headshots do more damage")
@@ -2500,9 +2453,6 @@ def build_cli_parser() -> argparse.Namespace:
                         help="headshot body toughness (default x3.0)")
     parser.add_argument("--hs-speed", action="store", type=int, dest="hsspeed", default=-1,
                         help="headshot zombie speed (default 25)")
-
-    parser.add_argument("--ns", action="store_true", dest="noscale", default=False,
-                        help="If specified, no size variation (incompatible with -g or -k)")
 
     parser.add_argument("-a", action="store_true", dest="altered_ai", default=False,
                         help="If specified, chance of altered AI for hostile animals (default 33%)")
@@ -2516,9 +2466,6 @@ def build_cli_parser() -> argparse.Namespace:
 
     parser.add_argument("--research", action="store_true", dest="research", default=False,
                         help="If specified, 500% size, 1% move, move mode 2")
-
-    parser.add_argument("--en0", action="store_true", dest="errornull", default=False,
-                        help="If specified, add in errornull tweaks")
 
     args = parser.parse_args()
 
